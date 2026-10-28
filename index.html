@@ -2759,13 +2759,18 @@ palBtn.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2;font:14px
 palBtn.onclick = e => { palBtn.blur(); e.shiftKey ? palInput.click() : loadPalette(); };
 document.body.appendChild(palBtn);
 
-/* Trilha de fundo: o áudio do vídeo sound/TS.mp4 em loop. Começa no primeiro toque de tecla ou clique (o navegador
+/* Trilha de fundo: o áudio do vídeo sound/TSB.mp4 em loop, audível somente fora do prédio durante a partida.
+   A reprodução é liberada no primeiro toque de tecla ou clique (o navegador
    não deixa tocar antes). Volume: controle no canto inferior direito, teclas - e = (±10%), 0 liga/desliga o mudo.
    O volume escolhido fica salvo no navegador. */
-const bgm = new Audio('sound/TS.mp4'); bgm.loop = true; bgm.preload = 'auto';
+const bgm = new Audio('sound/TSB.mp4'); bgm.loop = true; bgm.preload = 'auto'; bgm.volume = 0;
 let musicVol = .1, musicMuted = false; // começa baixa: 10%
 try { const v = parseFloat(localStorage.getItem('expediente.vol')); if (v >= 0 && v <= 1) musicVol = v; } catch (e) { }
-const musicApply = () => { bgm.volume = musicMuted ? 0 : musicVol; volRange.value = Math.round(musicVol * 100); volLbl.textContent = musicMuted || musicVol === 0 ? '♪ MUDO' : `♪ ${Math.round(musicVol * 100)}%`; };
+const musicUpdate = () => {
+  const playing = game === 'play' || game === 'note' || game === 'map';
+  bgm.volume = !musicMuted && playing && kindAt(player.x, player.z) === 'out' ? musicVol : 0;
+};
+const musicApply = () => { musicUpdate(); volRange.value = Math.round(musicVol * 100); volLbl.textContent = musicMuted || musicVol === 0 ? '♪ MUDO' : `♪ ${Math.round(musicVol * 100)}%`; };
 const musicSet = v => { musicVol = clamp(v, 0, 1); musicMuted = false; try { localStorage.setItem('expediente.vol', musicVol); } catch (e) { } musicApply(); };
 const musicStart = () => { if (bgm.paused) bgm.play().catch(() => { }); };
 const volBox = document.createElement('label');
@@ -2828,6 +2833,7 @@ function frame() {
   // copo na mão esquerda; a cada gole o braço sobe até a boca
   prig.cup.visible = player.cafe > 0 && !player.dead;
   if (game === 'play' && prig.cup.visible && player.anim.cur !== 'Hit_Front_Light') { const k = Math.sin(clamp(player.sip / .5, 0, 1) * Math.PI); prig.j.arm_L.o.rotation.x = -(30 + k * 70) * D2R; prig.j.fore_L.o.rotation.x = -(55 + k * 45) * D2R; }
+  musicUpdate();
   audioUpdate(dt);
   cameraAndRender(dt, t);
 }

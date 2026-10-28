@@ -1992,14 +1992,15 @@ function updateEntities(dt, t) {
     const dx = player.x - e.x, dz = player.z - e.z, d = Math.hypot(dx, dz);
     if (d > 45) { scene.remove(e.rig.root); entities.splice(entities.indexOf(e), 1); if (e.seat) e.seat.taken = null; continue; }
     if (e.kind === 'palha' && updateBurning(e, dt, t, d)) continue;
-    if (e.calm) { updateCalm(e, dt, d); continue; }
     const los = d < 16 && !segBlocked(e.x, e.z, player.x, player.z);
     const ignore = player.seat && player.ignored; // quem está sentado (30% das vezes) some para ela
-    e.hunt = !ignore && (los || d < 6);
+    e.hunt = !e.calm && !ignore && (los || d < 6);
     e.lit = false;
     if (on && d < 11 && los) { const cosA = (-dx * aimX + -dz * aimZ) / Math.max(d, 1e-3); if (cosA > Math.cos(.42)) e.lit = true; }
     if (e.lit) { e.stun += dt; if (e.stun > 1.3) { vanish(e, 'luz'); continue; } }
     else e.stun = Math.max(0, e.stun - dt * .4);
+    // As pacíficas também se desfazem na luz; só a movimentação é diferente.
+    if (e.calm) { updateCalm(e, dt, d); continue; }
     const speed = e.lit ? 0 : (e.hunt ? Math.min(4.6, 3.3 + levelN * .12) : 1.5) * (e.kind === 'lobo' ? 1.15 : e.kind === 'palha' ? .8 : 1); // a palha é lenta, mas não para
     e.repath -= dt;
     let tx = player.x, tz = player.z;

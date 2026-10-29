@@ -2,12 +2,12 @@
 <html lang="pt-br">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Expediente</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Krona+One&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
-  html,body{margin:0;height:100%;background:#000;overflow:hidden}
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
   canvas{display:block;cursor:none}
 </style>
 <script type="importmap">
@@ -1770,6 +1770,7 @@ const keys = new Set();
 const mouse = { ndc: new THREE.Vector2(), active: 0 };
 const ray = new THREE.Raycaster(), aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -1), aimPt = new THREE.Vector3();
 let aimX = 0, aimZ = -1, zoom = 24;
+const stick = { on: false, x: 0, z: 0 }; // direção do joystick virtual, preenchida pelos controles de toque
 
 function lightLevel(x, z) { return kindAt(x, z) === 'out' ? 1 : bakeAt(x, .5, z, 0, 1, 0, x, z) + flickNear * .8; }
 let lightCache = 1, lightT = 0;
@@ -1781,6 +1782,7 @@ function updatePlayer(dt, t) {
   if (keys.has('KeyS') || keys.has('ArrowDown')) iz += 1;
   if (keys.has('KeyA') || keys.has('ArrowLeft')) ix -= 1;
   if (keys.has('KeyD') || keys.has('ArrowRight')) ix += 1;
+  if (stick.on) { ix += stick.x; iz += stick.z; } // joystick virtual (celular)
   let il = Math.hypot(ix, iz); if (il > 0) { ix /= il; iz /= il; }
   if (player.seat) { if (il > 0 || keys.has('KeyE')) { keys.delete('KeyE'); standUp(); } il = ix = iz = 0; } // sentado: andar ou [E] levanta
   const wantRun = (keys.has('ShiftLeft') || keys.has('ShiftRight')) && il > 0 && player.stam > 0 && player.stamLock <= 0;
@@ -2760,16 +2762,17 @@ palBtn.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2;font:14px
 palBtn.onclick = e => { palBtn.blur(); e.shiftKey ? palInput.click() : loadPalette(); };
 document.body.appendChild(palBtn);
 
-/* Trilha de fundo: o áudio do vídeo sound/TSB.mp4 em loop, audível somente fora do prédio durante a partida.
+/* Trilha de fundo: sound/Trilha1.wav em loop durante a partida (fora do prédio fica em 1%).
    A reprodução é liberada no primeiro toque de tecla ou clique (o navegador
    não deixa tocar antes). Volume: controle no canto inferior direito, teclas - e = (±10%), 0 liga/desliga o mudo.
    O volume escolhido fica salvo no navegador. */
-const bgm = new Audio('sound/TSB.mp4'); bgm.loop = true; bgm.preload = 'auto'; bgm.volume = 0;
+// Trilha1: toca durante toda a partida; fora do prédio cai para 1%
+const bgm = new Audio('sound/Trilha1.wav'); bgm.loop = true; bgm.preload = 'auto'; bgm.volume = 0;
 let musicVol = .1, musicMuted = false; // começa baixa: 10%
 try { const v = parseFloat(localStorage.getItem('expediente.vol')); if (v >= 0 && v <= 1) musicVol = v; } catch (e) { }
 const musicUpdate = () => {
   const playing = game === 'play' || game === 'note' || game === 'map';
-  bgm.volume = !musicMuted && playing && kindAt(player.x, player.z) === 'out' ? musicVol : 0;
+  bgm.volume = !musicMuted && playing ? (kindAt(player.x, player.z) === 'out' ? .01 : musicVol) : 0;
 };
 const musicApply = () => { musicUpdate(); volRange.value = Math.round(musicVol * 100); volLbl.textContent = musicMuted || musicVol === 0 ? '♪ MUDO' : `♪ ${Math.round(musicVol * 100)}%`; };
 const musicSet = v => { musicVol = clamp(v, 0, 1); musicMuted = false; try { localStorage.setItem('expediente.vol', musicVol); } catch (e) { } musicApply(); };
@@ -2811,6 +2814,78 @@ addEventListener('mousemove', e => {
 });
 addEventListener('mousedown', () => { audioInit(); if (AC && AC.state === 'suspended') AC.resume(); musicStart(); });
 addEventListener('wheel', e => { zoom = clamp(zoom + Math.sign(e.deltaY) * 2, 16, 36); }, { passive: true });
+
+/* Controles de toque (celular): só aparecem no primeiro toque na tela.
+   Metade esquerda: joystick que nasce onde o dedo encosta (empurrar até a borda = correr).
+   Botões à direita mandam as mesmas teclas do teclado (E, Q segurado, R, F, M).
+   Tocar fora dos botões fecha bilhete/mapa e começa/recomeça a partida. Pinça com dois dedos = zoom. */
+const sendKey = (code, down) => dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { code }));
+const touchUI = document.createElement('div');
+touchUI.style.cssText = 'position:fixed;inset:0;z-index:1;display:none;touch-action:none';
+const stickBase = document.createElement('div'), stickKnob = document.createElement('div');
+stickBase.style.cssText = 'position:absolute;width:120px;height:120px;margin:-60px 0 0 -60px;border:1px solid #ece8d4;border-radius:50%;opacity:.35;display:none;pointer-events:none';
+stickKnob.style.cssText = 'position:absolute;left:50%;top:50%;width:48px;height:48px;margin:-24px 0 0 -24px;background:#ece8d4;border-radius:50%;opacity:.7';
+stickBase.appendChild(stickKnob); touchUI.appendChild(stickBase);
+const touchBtns = [ // [rótulo, tecla, direita px, baixo px]
+  ['E', 'KeyE', 24, 150], ['Q', 'KeyQ', 104, 110], ['R', 'KeyR', 24, 230], ['F', 'KeyF', 104, 190], ['M', 'KeyM', 104, 270]];
+for (const [label, code, rt, bt] of touchBtns) {
+  const b = document.createElement('div'); b.textContent = label;
+  b.style.cssText = `position:absolute;right:calc(${rt}px + env(safe-area-inset-right));bottom:calc(${bt}px + env(safe-area-inset-bottom));width:64px;height:64px;border:1px solid #ece8d4;border-radius:50%;color:#ece8d4;font:22px "Share Tech Mono",monospace;display:flex;align-items:center;justify-content:center;opacity:.55;touch-action:none`;
+  b.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); b.style.opacity = .95; sendKey(code, true); }, { passive: false });
+  const up = e => { e.preventDefault(); e.stopPropagation(); b.style.opacity = .55; sendKey(code, false); };
+  b.addEventListener('touchend', up, { passive: false }); b.addEventListener('touchcancel', up, { passive: false });
+  touchUI.appendChild(b);
+}
+document.body.appendChild(touchUI);
+if (matchMedia('(pointer: coarse)').matches) touchUI.style.display = 'block';
+let stickId = null, stickX0 = 0, stickY0 = 0, pinchD = 0;
+const pinchTouches = new Map();
+const stickEnd = () => { stickId = null; stick.on = false; stick.x = stick.z = 0; keys.delete('ShiftLeft'); stickBase.style.display = 'none'; };
+touchUI.addEventListener('touchstart', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (game !== 'play') { // telas sem andar: um toque age como Enter (ou fecha o mapa)
+      if (game === 'map') { sendKey('Escape', true); sendKey('Escape', false); }
+      else { sendKey('Enter', true); sendKey('Enter', false); }
+      continue;
+    }
+    if (stickId === null && t.clientX < innerWidth * .55) {
+      stickId = t.identifier; stickX0 = t.clientX; stickY0 = t.clientY; stick.on = true;
+      stickBase.style.left = stickX0 + 'px'; stickBase.style.top = stickY0 + 'px'; stickBase.style.display = 'block';
+      stickKnob.style.transform = '';
+    } else pinchTouches.set(t.identifier, t);
+  }
+  if (pinchTouches.size === 2) { const [a, b] = [...pinchTouches.values()]; pinchD = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); }
+}, { passive: false });
+touchUI.addEventListener('touchmove', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (t.identifier === stickId) {
+      let dx = t.clientX - stickX0, dy = t.clientY - stickY0; const d = Math.hypot(dx, dy), R0 = 60;
+      if (d > R0) { dx *= R0 / d; dy *= R0 / d; }
+      stickKnob.style.transform = `translate(${dx}px,${dy}px)`;
+      const k = Math.min(d, R0) / R0; // zona morta pequena no centro
+      stick.x = k > .15 ? dx / R0 : 0; stick.z = k > .15 ? dy / R0 : 0;
+      if (k > .9) keys.add('ShiftLeft'); else keys.delete('ShiftLeft');
+    } else if (pinchTouches.has(t.identifier)) pinchTouches.set(t.identifier, t);
+  }
+  if (pinchTouches.size === 2) {
+    const [a, b] = [...pinchTouches.values()], d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    if (pinchD > 0) zoom = clamp(zoom * pinchD / d, 16, 36);
+    pinchD = d;
+  }
+}, { passive: false });
+const touchUp = e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) { if (t.identifier === stickId) stickEnd(); pinchTouches.delete(t.identifier); }
+  if (pinchTouches.size < 2) pinchD = 0;
+};
+touchUI.addEventListener('touchend', touchUp, { passive: false });
+touchUI.addEventListener('touchcancel', touchUp, { passive: false });
+// o áudio só pode começar num gesto "completo" (touchend) em alguns navegadores
+addEventListener('touchend', () => { audioInit(); if (AC && AC.state === 'suspended') AC.resume(); musicStart(); });
+addEventListener('touchstart', () => { if (touchUI.style.display === 'none') touchUI.style.display = 'block'; }, { capture: true, passive: true });
+setInterval(() => { if (game !== 'play' && stickId !== null) stickEnd(); }, 250);
 
 const clock = new THREE.Clock();
 const camTarget = new THREE.Vector3(), focusPt = new THREE.Vector3();

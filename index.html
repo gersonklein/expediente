@@ -1697,7 +1697,10 @@ function arcJoints(P, n, a, b, fr, bow, hx, hz) {
   for (let k = 0; k < fr.length - 1; k++) { f += fr[k]; P[n++].copy(a).addScaledVector(du, len * f).addScaledVector(bw, Math.sin(Math.PI * f) * bow * len); }
   return n;
 }
-function updateSpider(rig, x, z, face, dt) {
+// curl 0..1: sob a lanterna ela se encolhe como aranha morta — o corpo baixa, as patas param de dar passos e as
+// pontas se recolhem para baixo do corpo (o IK curto joga os joelhos para cima, dobrando a pata)
+const _ft = new THREE.Vector3(), _tk = new THREE.Vector3();
+function updateSpider(rig, x, z, face, dt, curl = 0) {
   const S = SPIDER, wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
   if (!rig.placed) { rig.px = x; rig.pz = z; rig.pf = rig.vf = face; rig.ax = x - Math.sin(face) * S.abd; rig.az = z - Math.cos(face) * S.abd; }
   rig.time += dt;
@@ -1709,7 +1712,7 @@ function updateSpider(rig, x, z, face, dt) {
   // abdômen em corrente atrás do cefalotórax
   const af = face + clamp(wrap(Math.atan2(x - rig.ax, z - rig.az) - face), -S.maxBend, S.maxBend);
   rig.af = af; rig.ax = x - Math.sin(af) * S.abd; rig.az = z - Math.cos(af) * S.abd;
-  const y = S.bodyY + Math.sin(rig.time * 9) * .04 * SZ * moving, roll = clamp(rig.turn * .06, -.25, .25);
+  const y = S.bodyY * (1 - .45 * curl) + Math.sin(rig.time * 9) * .04 * SZ * moving, roll = clamp(rig.turn * .06, -.25, .25);
   rig.head.position.set(x, y, z); rig.head.rotation.set(0, face, roll);
   rig.abd.position.set(x, y + .02 * SZ, z); rig.abd.rotation.set(-.12 + Math.sin(rig.time * 9 - .7) * .03 * moving, af, roll * .5);
   // patas: quadril e ponto de descanso acompanham o corpo; o pé fica plantado até o erro passar do limiar
@@ -1722,7 +1725,7 @@ function updateSpider(rig, x, z, face, dt) {
     l.err = Math.hypot(l.foot.x - l.rest.x, l.foot.z - l.rest.z);
   }
   rig.placed = true;
-  for (const l of rig.legs.filter(l => !l.stepping && l.err > S.stepTh).sort((a, b) => b.err - a.err)) {
+  if (curl < .05) for (const l of rig.legs.filter(l => !l.stepping && l.err > S.stepTh).sort((a, b) => b.err - a.err)) {
     if (!l.neighbors.every(n => !n.stepping) && l.err < S.stepTh * 2.2) continue; // vizinhas no ar: espera (a não ser que fique para trás demais)
     l.stepping = true; l.t = 0; l.from.copy(l.foot); l.to.copy(l.rest).addScaledVector(rig.vel, S.stepDur * S.lead); l.to.y = 0;
   }
@@ -1732,15 +1735,17 @@ function updateSpider(rig, x, z, face, dt) {
       l.foot.lerpVectors(l.from, l.to, t * t * (3 - 2 * t)); l.foot.y = Math.sin(Math.PI * t) * S.stepH;
       if (l.t >= 1) { l.stepping = false; l.foot.y = 0; l.landed = true; }
     }
-    const ox = l.foot.x - l.hip.x, oz = l.foot.z - l.hip.z, oh = Math.hypot(ox, oz) || 1, hx = ox / oh, hz = oz / oh;
+    // encolhendo: a ponta vai do pé plantado para baixo do corpo (o pé plantado não muda, para ela poder voltar)
+    const ft = curl > 0 ? _ft.lerpVectors(l.foot, _tk.set(x + (l.hip.x - x) * .6, y - .2 * SZ, z + (l.hip.z - z) * .6), curl * curl * (3 - 2 * curl)) : l.foot;
+    const ox = ft.x - l.hip.x, oz = ft.z - l.hip.z, oh = Math.hypot(ox, oz) || 1, hx = ox / oh, hz = oz / oh;
     l.coxaEnd.set(l.hip.x + hx * l.coxa, l.hip.y + l.coxa * .35, l.hip.z + hz * l.coxa); // coxa curta, para fora e um pouco para cima
-    l.ankle.set(l.foot.x + hx * l.tarsus * .25, l.foot.y + l.tarsus, l.foot.z + hz * l.tarsus * .25);
+    l.ankle.set(ft.x + hx * l.tarsus * .25, ft.y + l.tarsus * (1 - curl * .7), ft.z + hz * l.tarsus * .25);
     solveKnee(l.coxaEnd, l.ankle, l.femur, l.tibia, l.knee, l.end);
     // quadril → coxa → fêmur em peças → joelho → patela/tíbia/metatarso/basitarso → tornozelo → pé
     const P = l.pts; let n = 0;
     P[n++].copy(l.hip); P[n++].copy(l.coxaEnd);
     n = arcJoints(P, n, l.coxaEnd, l.knee, S.upper, S.bowU, hx, hz); P[n++].copy(l.knee);
-    n = arcJoints(P, n, l.knee, l.end, S.lower, S.bow, hx, hz); P[n++].copy(l.end); P[n++].copy(l.foot);
+    n = arcJoints(P, n, l.knee, l.end, S.lower, S.bow * (1 + curl * 2.5), hx, hz); P[n++].copy(l.end); P[n++].copy(ft); // encolhida: a pata se curva mais
     for (let k = 0; k < l.bones.length; k++) placeBone(l.bones[k], P[k], P[k + 1]);
     for (let k = 0; k < l.nodes.length; k++) l.nodes[k].position.copy(P[k + 1]);
   }
@@ -1863,6 +1868,7 @@ const ROOM_NAMES = { escritorio: 'sala dos terminais', maquinas: 'sala das fitas
 function startLevel(n) {
   for (const ch of [...chunks.values()]) disposeChunk(ch);
   for (const e of entities) scene.remove(e.rig.root); entities.length = 0;
+  for (const q of dissolving) scene.remove(q.e.rig.root); dissolving.length = 0; if (dust) dust.clear();
   for (const f of burning.values()) scene.remove(f.grp); burning.clear(); altered.clear(); pendingRoom.length = 0; curRoom = null; roomFlick = null;
   fireSmoke.clear(); cigSmoke.clear();
   levelN = n; L = levelDef(n); SEED = (T.seed * 7919 + n * 104729) | 0;
@@ -2080,8 +2086,33 @@ function spawnEntity(forceKind = null, ahead = false) {
 }
 let restT = 0; // depois de espantar uma com a lanterna: 25 s sem nenhuma nova surgir
 const pron = e => e.kind === 'aranha' ? 'ela' : 'ele';
+// a aranha desintegrada pela lanterna: encolhida, os pedaços somem um a um (das pontas das patas para o corpo),
+// cada um virando poeira clara que sobe devagar
+const dissolving = [], _dv = new THREE.Vector3();
+let dust = null; // criada no primeiro uso: a classe Smoke vem mais abaixo
+function dissolve(e) {
+  dust = dust || new Smoke(320, .8, .3);
+  const parts = [], body = [];
+  e.rig.root.traverse(o => { if (o.isMesh) (o.parent === e.rig.root ? parts : body).push(o); });
+  parts.sort((a, b) => a.position.y - b.position.y); // pernas: mais baixo (pontas) primeiro
+  dissolving.push({ e, t: 0, done: 0, parts: [...parts, ...body] });
+}
+function updateDissolve(dt, t) {
+  for (let k = dissolving.length - 1; k >= 0; k--) {
+    const q = dissolving[k], e = q.e; q.t += dt;
+    updateSpider(e.rig, e.x + (Math.random() - .5) * .1, e.z, e.face, dt, 1);
+    const want = Math.floor(q.parts.length * clamp(q.t / .9, 0, 1));
+    while (q.done < want) {
+      const m = q.parts[q.done++]; m.getWorldPosition(_dv); m.visible = false;
+      for (let n = 0; n < (m.parent === e.rig.root ? 1 : 6); n++) dust.emit(_dv.x + R(-.08, .08), _dv.y, _dv.z + R(-.08, .08), R(.12, .28), R(-.3, .3), R(-.3, .3));
+    }
+    if (q.t > 1) { scene.remove(e.rig.root); dissolving.splice(k, 1); }
+  }
+  if (dust) dust.update(dt, t);
+}
 function vanish(e, why) {
-  scene.remove(e.rig.root); entities.splice(entities.indexOf(e), 1);
+  if (why === 'luz' && e.kind === 'aranha') dissolve(e); else scene.remove(e.rig.root);
+  entities.splice(entities.indexOf(e), 1);
   if (e.seat) e.seat.taken = null;
   // espantada (luz) ou depois de atravessar o andarilho, demora a voltar outra: o susto rende um respiro
   spawnT = Math.max(spawnT, why === 'luz' ? (restT = 25) : why === 'toque' ? R(18, 28) - Math.min(6, levelN) : R(5, 9));
@@ -2122,6 +2153,7 @@ function updateBurning(e, dt, t, d) {
   return false;
 }
 function updateEntities(dt, t) {
+  updateDissolve(dt, t);
   spawnT -= dt; restT -= dt;
   // se não achou lugar com caminho até o jogador, tenta de novo logo em vez de esperar o ciclo inteiro
   if (spawnT <= 0 && restT <= 0 && entities.length < L.ent) spawnT = spawnEntity(null, Math.random() < .5) ? R(5, 9) : 1; // metade nasce lá adiante
@@ -2159,7 +2191,7 @@ function updateEntities(dt, t) {
     e.anim.update(dt);
     if (e.kind === 'aranha') { // pés plantados + IK em coordenadas de mundo; cada pouso perto raspa o chão
       e.rig.root.position.set(0, 0, 0); e.rig.root.rotation.y = 0;
-      updateSpider(e.rig, e.x + sh, e.z, e.face, dt);
+      updateSpider(e.rig, e.x + sh, e.z, e.face, dt, clamp(e.stun / 1.3, 0, 1)); // na luz se encolhe; fora dela se abre devagar
       for (const l of e.rig.legs) if (l.landed) { l.landed = false; if (d < 14 && Math.random() < .5) footstep(surfaceAt(l.foot.x, l.foot.z), .22 * (1 - d / 14), true); }
     }
     if (d < .75 && !player.dead && !ignore) {

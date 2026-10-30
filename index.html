@@ -889,32 +889,11 @@ const SHARD_MATS = ['CY', 'CL', 'PD'].map(c => new THREE.MeshBasicMaterial({ col
    PY = PX / cos58° porque o plano é vertical e a câmera olha 58° para baixo. 3 tons de folha + 3 de flor, borda de
    luz do lado do sol, alfa 0/1. Cada variante tem a malha visível (de frente para a câmera) e o recorte de sombra
    (de frente para o sol). Cada roseira se inclina um pouco para longe de quem passa perto e volta devagar.
-   Forma: a rosa de pixel/ (grade 23x37) redesenhada em 13x19 texels para ficar na altura do andarilho: flor com a
-   espiral das pétalas, haste fina com espinho e duas folhas pontudas. Variantes: normal, mais baixa e em botão, cada
+   Forma: a rosa de pixel/ (grade 23x37) redesenhada em 13x19 texels para ficar na altura do andarilho: flor pequena em
+   botão, haste fina com espinho e duas folhas pontudas. Variantes: normal e mais baixa, cada
    uma também espelhada (a borda de luz vem depois do espelho, sempre do lado do sol). Sem escala: quebraria a haste de 1 px */
 const RPX = 2 * 24 * Math.tan(16 * D2R) / 256, RPY = RPX / Math.cos(58 * D2R), ROSE_W = 13, ROSE_H = 19;
 const ROSE_ART = [
-  '....fffff....',
-  '..ffrrrrfff..',
-  '.f.frffrrfff.',
-  '.ffrfrrfffrf.',
-  '.fffrffrrrff.',
-  '..fffrrfffff.',
-  '..rfffrfffff.',
-  '..frdfdffff..',
-  '...fddfdff...',
-  '....ddddd....',
-  '......e......',
-  '......e...mcc',
-  'ccm...e..mmc.',
-  '.cmm..e.mmc..',
-  '..mmm.e.mm...',
-  '...mmmee.....',
-  '......e.e....',
-  '.....ee......',
-  '......e......',
-];
-const ROSE_BUD = [
   '.............',
   '.............',
   '.............',
@@ -925,13 +904,21 @@ const ROSE_BUD = [
   '....frfff....',
   '.....fdf.....',
   '.....ddd.....',
+  '......e......',
+  '......e...mcc',
+  'ccm...e..mmc.',
+  '.cmm..e.mmc..',
+  '..mmm.e.mm...',
+  '...mmmee.....',
+  '......e.e....',
+  '.....ee......',
+  '......e......',
 ];
 const ROSE_VARS = (() => {
   const col = { e: '#4d4447', m: '#758787', c: '#9ab0a5', f: '#f79d8a', d: '#9a807b', h: '#dba79c', r: '#7c6669' };
   const sunLeft = SUN_DIR.x < 0, out = [];
-  for (let v = 0; v < 6; v++) { // 0-1 normal, 2-3 mais baixa, 4-5 em botão; ímpar = espelhada
-    const kind = v >> 1, blank = '.'.repeat(ROSE_W);
-    const rows = kind === 2 ? [...ROSE_BUD, ...ROSE_ART.slice(10)] : kind === 1 ? [blank, blank, ...ROSE_ART.slice(0, 16), ROSE_ART[18]] : ROSE_ART;
+  for (let v = 0; v < 4; v++) { // 0-1 normal, 2-3 mais baixa; ímpar = espelhada
+    const blank = '.'.repeat(ROSE_W), rows = v >> 1 ? [blank, blank, ...ROSE_ART.slice(0, 16), ROSE_ART[18]] : ROSE_ART;
     const px = rows.map(row => v & 1 ? [...row].reverse() : [...row]);
     for (const row of px) { // borda de luz do lado do sol
       const xs = row.map((k, x) => k === 'm' || k === 'f' ? x : -1).filter(x => x >= 0); if (!xs.length) continue;
@@ -956,11 +943,11 @@ function makeRoses(grp, ci, cj, boxes, r) {
     if (px < x0 + .5 || px > x0 + S - .5 || pz < z0 + .6 || pz > z0 + S - .5) return;
     if (Math.abs(px - (x0 + S / 2 + Math.sin((pz - z0) * .32 + ph) * 1.3)) < .7) return; // trilha sinuosa no meio
     if (boxes.some(b => px > b[0] - .3 && px < b[2] + .3 && pz > b[1] - .3 && pz < b[3] + .3)) return;
-    pts.push([px, pz, r() < .16 ? 4 + (r() * 2 | 0) : r() * 4 | 0]); // variante: poucas em botão
+    pts.push([px, pz, r() * ROSE_VARS.length | 0]);
   };
-  // grade da célula (C = 3): 2 fileiras por célula e 4 roseiras por fileira, o bastante para as folhas quase se tocarem
-  // e os 19 px de altura não cobrirem a fileira de trás. Fileiras intercaladas em meio passo, leve desvio e clareiras por ruído
-  const rowZ = C / 2, stepX = C / 4;
+  // grade da célula (C = 3): 4 fileiras por célula e 8 roseiras por fileira, um tapete denso em que as folhas se sobrepõem.
+  // Fileiras intercaladas em meio passo, leve desvio e clareiras por ruído
+  const rowZ = C / 4, stepX = C / 8;
   for (let z = z0 + rowZ, row = 0; z < z0 + S - .5; z += rowZ, row++) {
     for (let x = x0 + stepX / 2 + (row % 2) * stepX / 2; x < x0 + S - .3; x += stepX) {
       const px = x + (r() - .5) * .08, pz = z + (r() - .5) * .08;
@@ -971,7 +958,7 @@ function makeRoses(grp, ci, cj, boxes, r) {
   }
   const n = pts.length, count = ROSE_VARS.map((_, v) => pts.filter(p => p[2] === v).length);
   const vis = ROSE_VARS.map((V, v) => { const m = new THREE.InstancedMesh(ROSE_GEO, V.mat, Math.max(1, count[v])); m.count = count[v]; grp.add(m); return m; });
-  const sh = ROSE_VARS.map((V, v) => { const m = new THREE.InstancedMesh(ROSE_GEO, V.shadow, Math.max(1, count[v])); m.count = count[v]; m.castShadow = true; grp.add(m); return m; });
+  const sh = ROSE_VARS.map((V, v) => { const m = new THREE.InstancedMesh(ROSE_GEO, V.shadow, Math.max(1, count[v] + 3 >> 2)); m.count = count[v] + 3 >> 2; m.castShadow = true; grp.add(m); return m; });
   const R0 = { n, meshes: [...vis, ...sh], vis, sh, x: new Float32Array(n), z: new Float32Array(n), v: new Uint8Array(n), slot: new Uint16Array(n), tx: new Float32Array(n), tz: new Float32Array(n), x0, z0, x1: x0 + S, z1: z0 + S };
   const used = ROSE_VARS.map(() => 0);
   pts.forEach(([x, z, v], i) => { R0.x[i] = x; R0.z[i] = z; R0.v[i] = v; R0.slot[i] = used[v]++; roseMatrix(R0, i); });
@@ -984,7 +971,8 @@ function roseMatrix(R0, i) {
   if (a > 1e-4) { _rax.set(tz / a, 0, -tx / a); _rq.setFromAxisAngle(_rax, a); } else _rq.identity(); // inclina na direção (tx, tz)
   _rpos.set(R0.x[i], 0, R0.z[i]); _rsc.set(1, 1, 1);
   _rm.compose(_rpos, _rq, _rsc); R0.vis[v].setMatrixAt(k, _rm);          // de frente para a câmera (que nunca gira)
-  _rsc.y = .35; _ry.copy(_rq).multiply(_rsun); _rm.compose(_rpos, _ry, _rsc); R0.sh[v].setMatrixAt(k, _rm); // recorte de frente para o sol, achatado: a sombra inteira cobriria duas fileiras
+  if (k & 3) return; // só 1 em cada 4 projeta sombra: no tapete denso as outras nem aparecem, e o mapa de sombras é o que mais pesa
+  _rsc.y = .35; _ry.copy(_rq).multiply(_rsun); _rm.compose(_rpos, _ry, _rsc); R0.sh[v].setMatrixAt(k >> 2, _rm); // recorte de frente para o sol, achatado: a sombra inteira cobriria duas fileiras
 }
 function updateRoses(dt) {
   const agents = [player, ...entities]; if (cat) agents.push(cat);

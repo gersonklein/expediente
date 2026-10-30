@@ -1871,7 +1871,7 @@ function startLevel(n) {
   clearMemo(); lastChunk = '';
   CUT.uListra.value = L.listra;
   player.x = player.z = .5 * L.C; player.face = Math.PI; player.noclipT = 0; player.seat = null; player.ignored = false;
-  visited = new Map(); exitSeen = false; spawnT = Math.max(5, 9 - n * 2); levelT = 0; placeName = '';
+  visited = new Map(); exitSeen = false; spawnT = Math.max(5, 9 - n * 2); restT = 0; levelT = 0; placeName = '';
   buildExit(); updateChunks(player.x, player.z, true); placeCat(); placeWoman(); removeCorner();
   showBanner(L.nome, L.sub);
 }
@@ -2078,12 +2078,13 @@ function spawnEntity(forceKind = null, ahead = false) {
   }
   return false;
 }
+let restT = 0; // depois de espantar uma com a lanterna: 25 s sem nenhuma nova surgir
 const pron = e => e.kind === 'aranha' ? 'ela' : 'ele';
 function vanish(e, why) {
   scene.remove(e.rig.root); entities.splice(entities.indexOf(e), 1);
   if (e.seat) e.seat.taken = null;
   // espantada (luz) ou depois de atravessar o andarilho, demora a voltar outra: o susto rende um respiro
-  spawnT = Math.max(spawnT, why === 'luz' ? R(30, 45) - Math.min(10, levelN * 2) : why === 'toque' ? R(18, 28) - Math.min(6, levelN) : R(5, 9));
+  spawnT = Math.max(spawnT, why === 'luz' ? (restT = 25) : why === 'toque' ? R(18, 28) - Math.min(6, levelN) : R(5, 9));
   if (why === 'luz') { stats.afastados++; showMsg(`${pron(e)} se desfez na luz`); flash = .25; }
   if (why === 'fogo') { if (Math.hypot(e.x - player.x, e.z - player.z) < 20) showMsg(`${pron(e)} virou cinza`); fireSmoke.emit(e.x, .6, e.z, 2.2); return; }
   sfxGlitch(.5);
@@ -2121,9 +2122,9 @@ function updateBurning(e, dt, t, d) {
   return false;
 }
 function updateEntities(dt, t) {
-  spawnT -= dt;
+  spawnT -= dt; restT -= dt;
   // se não achou lugar com caminho até o jogador, tenta de novo logo em vez de esperar o ciclo inteiro
-  if (spawnT <= 0 && entities.length < L.ent) spawnT = spawnEntity(null, Math.random() < .5) ? R(5, 9) : 1; // metade nasce lá adiante
+  if (spawnT <= 0 && restT <= 0 && entities.length < L.ent) spawnT = spawnEntity(null, Math.random() < .5) ? R(5, 9) : 1; // metade nasce lá adiante
   const on = player.lanterna && player.bat > 0, C = L.C;
   strawFireLight.intensity = 0;
   for (const e of [...entities]) {

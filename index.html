@@ -882,22 +882,44 @@ function makeCrow(grp, x, z, r) {
    menor que o andarilho. Texel casado ao quadro de 256 px no zoom padrão (24): PX = 2·24·tan16°/256, e em Y
    PY = PX / cos58° porque o plano é vertical e a câmera olha 58° para baixo. 3 tons de folha + 3 de flor, borda de
    luz do lado do sol, alfa 0/1. Cada variante tem a malha visível (de frente para a câmera) e o recorte de sombra
-   (de frente para o sol). Cada roseira se inclina para longe de quem passa perto e volta devagar. */
-const RPX = 2 * 24 * Math.tan(16 * D2R) / 256, RPY = RPX / Math.cos(58 * D2R), ROSE_W = 11, ROSE_H = 10;
+   (de frente para o sol). Cada roseira se inclina um pouco para longe de quem passa perto e volta devagar.
+   Forma: touceira arredondada (união de bolhas) com borda recortada de folhas, sombreada do sol para o lado oposto,
+   hastes curtas aparecendo no pé, uma ou duas varas espinhosas passando do topo com botão, e rosas abertas
+   (miolo escuro e pétalas em volta) espalhadas pela metade de cima */
+const RPX = 2 * 24 * Math.tan(16 * D2R) / 256, RPY = RPX / Math.cos(58 * D2R), ROSE_W = 13, ROSE_H = 12;
 const ROSE_VARS = (() => {
   const col = { e: '#4d4447', m: '#758787', c: '#9ab0a5', f: '#f79d8a', d: '#9a807b', h: '#dba79c' };
-  const sunLeft = SUN_DIR.x < 0, out = [];
-  for (let v = 0; v < 5; v++) {
+  const sunLeft = SUN_DIR.x < 0, sx = sunLeft ? -1 : 1, out = [];
+  for (let v = 0; v < 8; v++) {
     const r = mulberry32(911 + v * 7), px = Array.from({ length: ROSE_H }, () => Array(ROSE_W).fill('.'));
     const set = (x, y, k) => { if (x >= 0 && y >= 0 && x < ROSE_W && y < ROSE_H) px[y][x] = k; };
-    const tops = [];
-    for (let s = 0; s < 3 + (r() * 2 | 0); s++) { // hastes tortas saindo da touceira
-      let x = 4 + (r() * 3 | 0); const top = 1 + (r() * 4 | 0);
-      for (let y = ROSE_H - 1; y >= top; y--) { set(x, y, 'e'); if (r() < .3) x += r() < .5 ? -1 : 1; x = clamp(x, 1, ROSE_W - 2); }
-      tops.push([x, top]);
+    const get = (x, y) => px[y]?.[x];
+    // touceira: 4–6 bolhas, apoiada a ~2 px do chão; a borda perde pixels ao acaso (folhas recortadas)
+    const blobs = Array.from({ length: 5 + (r() * 3 | 0) }, (_, k) => [6 + (r() - .5) * (k ? 7 : 2), 4.5 + r() * 3.5, 2.4 + r() * 1.3]);
+    for (let y = 0; y < ROSE_H - 2; y++) for (let x = 0; x < ROSE_W; x++) {
+      let depth = -9; for (const [cx, cy, rad] of blobs) depth = Math.max(depth, rad - Math.hypot(x - cx, (y - cy) * 1.1));
+      if (depth < 0 || (depth < .8 && r() < .3)) continue;
+      const lit = .5 + .38 * (x - 6) / 6 * sx - .5 * (y - 4) / 7 + (r() - .5) * .55; // sol de um lado e de cima
+      set(x, y, lit > .66 ? 'c' : lit > .22 ? 'm' : 'e');
+      if (depth > 1.5 && r() < .08) set(x, y, 'e'); // vãos escuros entre as folhas
     }
-    for (let k = 0; k < 22; k++) { const y = 3 + (r() * (ROSE_H - 3) | 0), x = 1 + (r() * (ROSE_W - 2) | 0); if (px[y][x] === '.' && (px[y][x - 1] === 'e' || px[y][x + 1] === 'e' || px[y + 1]?.[x] === 'm')) set(x, y, r() < .7 ? 'm' : 'e'); } // folhas
-    for (const [x, y] of tops) { set(x, y - 1, 'f'); set(x + 1, y - 1, 'f'); set(x, y, 'f'); set(x + 1, y, 'd'); set(sunLeft ? x : x + 1, y - 1, 'h'); } // botões 2x2 com brilho do lado do sol
+    let bottom = 0; for (let y = 0; y < ROSE_H; y++) if (px[y].some(k => k !== '.')) bottom = y;
+    for (let s = 0; s < 2 + (r() * 2 | 0); s++) { let x = 4 + (r() * 5 | 0); for (let y = ROSE_H - 1; y > bottom - 1; y--) set(x, y, 'e'); } // hastes no pé
+    for (let s = 0; s < 1 + (r() < .6 ? 1 : 0); s++) { // vara espinhosa passando do topo, com botão na ponta
+      let x = 3 + (r() * 7 | 0), y = 0; while (y < ROSE_H && get(x, y) === '.') y++;
+      const dx = x < 6 ? -1 : 1, len = 2 + (r() * 2 | 0);
+      for (let k = 0; k < len && y > 0; k++) { y--; if (r() < .45) x += dx; set(x, y, 'e'); if (r() < .35) set(x - dx, y, 'e'); }
+      set(x, y - 1, 'f'); set(x, y, 'd');
+    }
+    // rosas abertas: miolo escuro, pétalas em cruz, brilho do lado do sol; pequenas 2x2 completam
+    const blooms = [];
+    for (let tries = 0, want = 2 + (r() * 3 | 0); tries < 40 && blooms.length < want; tries++) {
+      const x = 1 + (r() * (ROSE_W - 2) | 0), y = 1 + (r() * 6 | 0);
+      if (get(x, y) === '.' || blooms.some(([bx, by]) => Math.abs(bx - x) < 3 && Math.abs(by - y) < 3)) continue;
+      blooms.push([x, y]);
+      if (r() < .6) { for (const [a, b] of [[0, -1], [-1, 0], [1, 0], [0, 1]]) set(x + a, y + b, 'f'); set(x, y, 'd'); set(x + sx, y - 1, 'h'); set(x - sx, y + 1, 'd'); }
+      else { set(x, y, 'f'); set(x + 1, y, 'f'); set(x, y + 1, 'd'); set(x + 1, y + 1, 'f'); set(sunLeft ? x : x + 1, y, 'h'); }
+    }
     for (let y = 0; y < ROSE_H; y++) { // borda de luz nas folhas do lado do sol
       const row = px[y], xs = row.map((k, x) => k === 'm' || k === 'e' ? x : -1).filter(x => x >= 0); if (!xs.length) continue;
       const x = sunLeft ? xs[0] : xs[xs.length - 1]; if (row[x] === 'm' && r() < .7) row[x] = 'c';
@@ -915,13 +937,23 @@ const ROSE_VARS = (() => {
 const ROSE_GEO = (() => { const gg = new THREE.PlaneGeometry(ROSE_W * RPX, ROSE_H * RPY).translate(0, ROSE_H * RPY / 2, 0), n = gg.attributes.normal; for (let i = 0; i < n.count; i++) n.setXYZ(i, 0, 1, 0); return gg; })(); // normal para cima: a luz é a do chão
 const SUN_YAW = Math.atan2(SUN_DIR.x, SUN_DIR.z);
 function makeRoses(grp, ci, cj, boxes, r) {
-  const C = L.C, x0 = ci * CH * C, z0 = cj * CH * C, S = CH * C, pts = [];
-  for (let z = z0 + 1.2; z < z0 + S - .8; z += 1.5) { // fileiras leste-oeste, com um corredor no meio
-    for (let x = x0 + .8; x < x0 + S - .8; x += .45 + r() * .15) {
-      if (Math.abs(x - (x0 + S / 2)) < .9) continue;
-      const px = x + (r() - .5) * .1, pz = z + (r() - .5) * .15;
-      if (boxes.some(b => px > b[0] - .3 && px < b[2] + .3 && pz > b[1] - .3 && pz < b[3] + .3)) continue;
-      pts.push([px, pz, r() * ROSE_VARS.length | 0, (r() < .5 ? -1 : 1) * (.94 + r() * .12)]); // variante, espelho e ±6%
+  const C = L.C, x0 = ci * CH * C, z0 = cj * CH * C, S = CH * C, pts = [], ph = r() * 6.3;
+  const add = (px, pz) => {
+    if (px < x0 + .5 || px > x0 + S - .5 || pz < z0 + .6 || pz > z0 + S - .5) return;
+    if (Math.abs(px - (x0 + S / 2 + Math.sin((pz - z0) * .32 + ph) * 1.3)) < .7) return; // trilha sinuosa no meio
+    if (boxes.some(b => px > b[0] - .3 && px < b[2] + .3 && pz > b[1] - .3 && pz < b[3] + .3)) return;
+    pts.push([px, pz, r() * ROSE_VARS.length | 0, (r() < .5 ? -1 : 1) * (.8 + r() * .35)]); // variante, espelho e tamanho
+  };
+  // fileiras tortas e intercaladas: cada fileira ondula e começa meio passo deslocada da anterior, passo e
+  // posição sorteados, falhas e moitas mais densas por ruído, e de vez em quando uma roseira entre as fileiras
+  for (let z = z0 + 1, row = 0; z < z0 + S - .5; z += 1.05 + r() * .4, row++) {
+    const wav = r() * 6.3, amp = .12 + r() * .3;
+    for (let x = x0 + .5 + (row % 2) * .35 + r() * .2; x < x0 + S - .5; x += .45 + r() * .4) {
+      const px = x + (r() - .5) * .25, pz = z + Math.sin(x * .6 + wav) * amp + (r() - .5) * .45;
+      const dens = fbm(px * .3 + 31, pz * .3 + 7, 2, 5);
+      if ((dens < .32 && r() < .85) || r() < .07) continue; // clareiras e falhas
+      add(px, pz);
+      if (dens > .6 && r() < .35) add(px + (r() - .5) * .5, pz + .45 + (r() - .5) * .25); // moita: uma a mais entre as fileiras
     }
   }
   const n = pts.length, count = ROSE_VARS.map((_, v) => pts.filter(p => p[2] === v).length);
@@ -950,9 +982,9 @@ function updateRoses(dt) {
     let changed = false, bent = false;
     for (let i = 0; i < R0.n; i++) {
       let gx = 0, gz = 0;
-      for (const a of near) { const dx = R0.x[i] - a.x, dz = R0.z[i] - a.z, d = Math.hypot(dx, dz); if (d < 1.5 && d > 1e-3) { const k = sstep(1.5, .25, d) * 1.15; gx += dx / d * k; gz += dz / d * k; } }
-      const gl = Math.hypot(gx, gz); if (gl > 1.15) { gx *= 1.15 / gl; gz *= 1.15 / gl; }
-      const k = Math.min(1, dt * (gl > .01 ? 9 : 2.5)), ox = R0.tx[i], oz = R0.tz[i];
+      for (const a of near) { const dx = R0.x[i] - a.x, dz = R0.z[i] - a.z, d = Math.hypot(dx, dz); if (d < .9 && d > 1e-3) { const k = sstep(.9, .2, d) * .4; gx += dx / d * k; gz += dz / d * k; } } // só roça: ~23° no máximo, só bem perto
+      const gl = Math.hypot(gx, gz); if (gl > .4) { gx *= .4 / gl; gz *= .4 / gl; }
+      const k = Math.min(1, dt * (gl > .01 ? 6 : 2.5)), ox = R0.tx[i], oz = R0.tz[i];
       R0.tx[i] += (gx - ox) * k; R0.tz[i] += (gz - oz) * k;
       if (Math.abs(R0.tx[i]) + Math.abs(R0.tz[i]) > .002) bent = true; else R0.tx[i] = R0.tz[i] = 0;
       if (Math.abs(R0.tx[i] - ox) + Math.abs(R0.tz[i] - oz) > 1e-4) { roseMatrix(R0, i); changed = true; }
@@ -1590,29 +1622,95 @@ function buildCat(v, cls) {
   const legs = [[-1, 1], [1, 1], [-1, -1], [1, -1]].map(([sx, sz]) => { const l = new THREE.Group(); l.position.set(sx * .06, -.04, sz * .15); body.add(l); part(l, .05, .19, .05, 0, -.095, 0); return l; });
   return { root, body, head, tail, legs };
 }
-// aranha (pasta creature2): corpo pequeno lá no alto, oito pernas finíssimas — fêmur subindo até o joelho e
-// tíbia descendo em ponta até o chão. Sem juntas do atlas: as pernas são animadas à mão em updateEntities
+/* aranha (pasta Aranha): o sistema da aranha-3d.html — cada pé fica plantado no chão e só dá o passo (em arco,
+   adiantado pela velocidade) quando se afasta demais do seu ponto de descanso; uma pata só levanta com as vizinhas
+   apoiadas (gait alternado); IK de 3 ossos com o joelho dobrando para cima e o tarso quase vertical; o abdômen segue
+   o cefalotórax em corrente, com dobra limitada; leve bob e inclinação nas curvas. Tudo em coordenadas de mundo:
+   o root fica na origem e updateSpider posiciona corpo e pernas a cada quadro */
+const SPIDER = { bodyY: 1.3, femur: 1.4, tibia: 1.6, tarsus: .32, reach: 1.85, hipW: .15, spread: [38, 150], scale: [1.05, .95, .9, 1],
+  stepTh: .55, stepDur: .16, stepH: .42, lead: 1.4, abd: .6, maxBend: 35 * D2R };
+const lerp = (a, b, t) => a + (b - a) * t;
+let SPIDER_GEO = null;
 function buildSpider() {
-  const M = new THREE.MeshLambertMaterial({ color: ctone(.04, 'N'), flatShading: true });
-  const root = new THREE.Group(), body = new THREE.Group(); body.position.y = 2.1; root.add(body);
-  const mesh = (gg) => { const m = new THREE.Mesh(gg, M); m.castShadow = true; return m; };
-  body.add(mesh(new THREE.IcosahedronGeometry(.22, 0).scale(1, .8, 1.1).translate(0, 0, .12)));
-  body.add(mesh(new THREE.IcosahedronGeometry(.34, 1).scale(1, .85, 1.25).translate(0, -.12, -.32)));
-  const eye = new THREE.MeshBasicMaterial({ color: tone(.85) });
-  for (const s of [-1, 1]) { const e = new THREE.Mesh(new THREE.BoxGeometry(.04, .03, .02), eye); e.position.set(s * .07, .05, .36); body.add(e); }
-  const seg = (a, b, w0, w1) => { // haste afinando de a até b
-    const d = new THREE.Vector3().subVectors(b, a), len = d.length();
-    const gg = new THREE.CylinderGeometry(w1, w0, len, 4).translate(0, len / 2, 0);
-    gg.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize())).translate(a.x, a.y, a.z);
-    return mesh(gg);
+  SPIDER_GEO = SPIDER_GEO || { // cilindros de altura 1, afinando para a ponta (o topo fica no fim do osso)
+    femur: new THREE.CylinderGeometry(.03, .042, 1, 4), tibia: new THREE.CylinderGeometry(.016, .03, 1, 4),
+    tarsus: new THREE.CylinderGeometry(.005, .016, 1, 4), knee: new THREE.IcosahedronGeometry(.045, 0),
+    ceph: new THREE.IcosahedronGeometry(.24, 0).scale(1, .72, 1.15), abd: new THREE.IcosahedronGeometry(.4, 1).scale(1, .85, 1.3).translate(0, .06, -.34),
   };
-  const legs = [35, 72, 108, 145].flatMap((deg, k) => [-1, 1].map(s => {
-    const g = new THREE.Group(), yaw = s * deg * D2R; g.rotation.y = yaw; body.add(g);
-    const reach = 1.5 + k % 2 * .25, knee = new THREE.Vector3(0, .75 + (k === 1 || k === 2 ? .15 : 0), .85), foot = new THREE.Vector3(0, -2.1, reach + .5);
-    g.add(seg(new THREE.Vector3(0, 0, .1), knee, .045, .035), seg(knee, foot, .035, .006));
-    return { g, yaw, ph: (k + (s > 0 ? 1 : 0)) % 2 * Math.PI };
-  }));
-  return { root, hips: body, hipsBase: 2.1, j: {}, lamp: null, tip: null, legs, kind: 'aranha' };
+  const M = new THREE.MeshLambertMaterial({ color: ctone(.04, 'N'), flatShading: true });
+  const mesh = (gg, par, mat = M) => { const m = new THREE.Mesh(gg, mat); m.castShadow = true; par.add(m); return m; };
+  const root = new THREE.Group(), head = new THREE.Group(), abd = new THREE.Group(); root.add(head, abd);
+  head.rotation.order = abd.rotation.order = 'YXZ';
+  mesh(SPIDER_GEO.ceph, head); mesh(SPIDER_GEO.abd, abd);
+  const eye = new THREE.MeshBasicMaterial({ color: tone(.85) });
+  for (const [x, y, z, w] of [[.06, .07, .25, .045], [.13, .05, .21, .03], [.03, .1, .2, .025]]) for (const s of [-1, 1]) {
+    const e = new THREE.Mesh(new THREE.BoxGeometry(w, w * .75, .02), eye); e.position.set(s * x, y, z); head.add(e); // olhos: um par grande e dois pequenos
+  }
+  for (const s of [-1, 1]) { const q = mesh(new THREE.BoxGeometry(.05, .05, .16).translate(0, 0, .08), head); q.position.set(s * .07, -.06, .24); q.rotation.set(.5, s * .25, 0); } // quelíceras
+  const legs = [], bySide = { '-1': [], '1': [] };
+  for (let k = 0; k < 4; k++) for (const side of [-1, 1]) {
+    const s = SPIDER.scale[k], V = () => new THREE.Vector3();
+    const leg = { k, side, localX: lerp(.12, -.12, k / 3), theta: lerp(SPIDER.spread[0], SPIDER.spread[1], k / 3) * D2R,
+      femur: SPIDER.femur * s, tibia: SPIDER.tibia * s, tarsus: SPIDER.tarsus * s, reach: SPIDER.reach * s,
+      hip: V(), knee: V(), ankle: V(), end: V(), rest: V(), foot: V(), from: V(), to: V(), stepping: false, t: 0,
+      mF: mesh(SPIDER_GEO.femur, root), mT: mesh(SPIDER_GEO.tibia, root), mA: mesh(SPIDER_GEO.tarsus, root), mK: mesh(SPIDER_GEO.knee, root) };
+    bySide[side].push(leg); legs.push(leg);
+  }
+  for (const l of legs) l.neighbors = [bySide[l.side][l.k - 1], bySide[l.side][l.k + 1], bySide[-l.side][l.k]].filter(Boolean);
+  return { root, hips: head, hipsBase: SPIDER.bodyY, j: {}, lamp: null, tip: null, legs, head, abd, kind: 'aranha',
+    placed: false, time: 0, px: 0, pz: 0, pf: 0, turn: 0, ax: 0, az: 0, af: 0, vel: new THREE.Vector3() };
+}
+const _sk = new THREE.Vector3(), _sd = new THREE.Vector3(), _sw = new THREE.Vector3(), _sUp = new THREE.Vector3(0, 1, 0);
+function placeBone(m, a, b) { // cilindro de altura 1 esticado de a até b
+  const d = _sd.subVectors(b, a), len = d.length() || 1e-6;
+  m.position.copy(a).addScaledVector(d, .5); m.scale.set(1, len, 1); m.quaternion.setFromUnitVectors(_sUp, d.divideScalar(len));
+}
+function solveKnee(hip, tgt, L1, L2, outKnee, outEnd) { // IK de 2 ossos: joelho no plano vertical quadril→alvo, dobrando para cima
+  const v = _sk.subVectors(tgt, hip), d = clamp(v.length(), Math.abs(L1 - L2) + 1e-3, (L1 + L2) * .999), u = v.normalize();
+  const w = _sw.copy(_sUp).addScaledVector(u, -u.y); if (w.lengthSq() < 1e-6) w.set(1, 0, 0); w.normalize();
+  const a = (L1 * L1 - L2 * L2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, L1 * L1 - a * a));
+  outKnee.copy(hip).addScaledVector(u, a).addScaledVector(w, h); outEnd.copy(hip).addScaledVector(u, d);
+}
+function updateSpider(rig, x, z, face, dt) {
+  const S = SPIDER, wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
+  if (!rig.placed) { rig.px = x; rig.pz = z; rig.pf = rig.vf = face; rig.ax = x - Math.sin(face) * S.abd; rig.az = z - Math.cos(face) * S.abd; }
+  rig.time += dt;
+  face = rig.vf += clamp(wrap(face - rig.vf), -3.2 * dt, 3.2 * dt); // o corpo gira com velocidade limitada, como a cabeça na aranha-3d
+  const idt = 1 / Math.max(dt, 1e-4);
+  rig.vel.set((x - rig.px) * idt, 0, (z - rig.pz) * idt); rig.px = x; rig.pz = z;
+  rig.turn = lerp(rig.turn, wrap(face - rig.pf) * idt, Math.min(1, dt * 6)); rig.pf = face;
+  const speed = rig.vel.length(), moving = Math.min(1, speed / 3.5);
+  // abdômen em corrente atrás do cefalotórax
+  const af = face + clamp(wrap(Math.atan2(x - rig.ax, z - rig.az) - face), -S.maxBend, S.maxBend);
+  rig.af = af; rig.ax = x - Math.sin(af) * S.abd; rig.az = z - Math.cos(af) * S.abd;
+  const y = S.bodyY + Math.sin(rig.time * 9) * .04 * moving, roll = clamp(rig.turn * .06, -.25, .25);
+  rig.head.position.set(x, y, z); rig.head.rotation.set(0, face, roll);
+  rig.abd.position.set(x, y + .02, z); rig.abd.rotation.set(-.12 + Math.sin(rig.time * 9 - .7) * .03 * moving, af, roll * .5);
+  // patas: quadril e ponto de descanso acompanham o corpo; o pé fica plantado até o erro passar do limiar
+  const fx = Math.sin(face), fz = Math.cos(face), rx = Math.cos(face), rz = -Math.sin(face); // frente e lateral (+x local)
+  for (const l of rig.legs) {
+    l.hip.set(x + fx * l.localX + rx * l.side * S.hipW, y, z + fz * l.localX + rz * l.side * S.hipW);
+    const ox = Math.cos(l.theta), oz = Math.sin(l.theta) * l.side;
+    l.rest.set(l.hip.x + (fx * ox + rx * oz) * l.reach, 0, l.hip.z + (fz * ox + rz * oz) * l.reach);
+    if (!rig.placed) l.foot.copy(l.rest);
+    l.err = Math.hypot(l.foot.x - l.rest.x, l.foot.z - l.rest.z);
+  }
+  rig.placed = true;
+  for (const l of rig.legs.filter(l => !l.stepping && l.err > S.stepTh).sort((a, b) => b.err - a.err)) {
+    if (!l.neighbors.every(n => !n.stepping) && l.err < S.stepTh * 2.2) continue; // vizinhas no ar: espera (a não ser que fique para trás demais)
+    l.stepping = true; l.t = 0; l.from.copy(l.foot); l.to.copy(l.rest).addScaledVector(rig.vel, S.stepDur * S.lead); l.to.y = 0;
+  }
+  for (const l of rig.legs) {
+    if (l.stepping) {
+      l.t += dt / S.stepDur; const t = Math.min(1, l.t);
+      l.foot.lerpVectors(l.from, l.to, t * t * (3 - 2 * t)); l.foot.y = Math.sin(Math.PI * t) * S.stepH;
+      if (l.t >= 1) { l.stepping = false; l.foot.y = 0; l.landed = true; }
+    }
+    const ox = l.foot.x - l.hip.x, oz = l.foot.z - l.hip.z, oh = Math.hypot(ox, oz) || 1;
+    l.ankle.set(l.foot.x + ox / oh * l.tarsus * .25, l.foot.y + l.tarsus, l.foot.z + oz / oh * l.tarsus * .25);
+    solveKnee(l.hip, l.ankle, l.femur, l.tibia, l.knee, l.end);
+    placeBone(l.mF, l.hip, l.knee); placeBone(l.mT, l.knee, l.end); placeBone(l.mA, l.end, l.foot); l.mK.position.copy(l.knee);
+  }
 }
 /* Corpos com as mesmas juntas do andarilho (as poses do atlas servem para todos):
    lobo   — 5% das vezes: corcunda, ombros largos, braços longos com garras, focinho, orelhas em ponta e rabo
@@ -1927,8 +2025,8 @@ function spawnEntity(forceKind = null) {
     if (Math.abs(x - player.x) < 10 && z - player.z > -11 && z - player.z < 9) continue;
     const i = Math.floor(x / C), j = Math.floor(z / C);
     if (!bfsPath(i, j, Math.floor(player.x / C), Math.floor(player.z / C))) continue;
-    // depois de 5 minutos de jogo, metade das criaturas que surgem é a aranha; senão a palha, e 5% das vezes o lobo
-    const kind = forceKind || (stats.tempo > 300 && Math.random() < .5 ? 'aranha' : Math.random() < .05 ? 'lobo' : 'palha');
+    // desde o início a criatura que surge é a aranha
+    const kind = forceKind || 'aranha';
     const rig = kind === 'aranha' ? buildSpider() : kind === 'palha' ? buildStraw() : buildCreature(kind); scene.add(rig.root);
     const e = { rig, kind, anim: new Animator(rig), x: (i + .5) * C, z: (j + .5) * C, face: 0, path: [], repath: 0, stun: 0, lit: false, hunt: false,
       calm: kind !== 'aranha' && Math.random() < .1, seat: null, sitting: false, seatT: 0, walkPh: 0 }; // 10%: não ataca, só procura uma cadeira para sentar
@@ -2019,10 +2117,10 @@ function updateEntities(dt, t) {
     if (e.kind === 'palha') e.anim.play(speed === 0 ? 'Idle_Neutral' : 'Walk_Heavy', { speed: speed / 1.9, fade: .35 }); // passada casada com a velocidade
     else e.anim.play(speed === 0 ? 'Idle_Neutral' : e.hunt ? 'Run_Neutral' : 'Walk_Neutral', { speed: e.hunt ? .9 : .55 });
     e.anim.update(dt);
-    if (e.kind === 'aranha') { // pernas em dois grupos alternados: avança, levanta a ponta, volta
-      e.walkPh += dt * speed * 3.2; const mv = speed > 0 ? 1 : 0;
-      for (const l of e.rig.legs) { const s = Math.sin(e.walkPh + l.ph); l.g.rotation.y = l.yaw + s * .22 * mv; l.g.rotation.x = -Math.max(0, Math.cos(e.walkPh + l.ph)) * .1 * mv; }
-      e.rig.hips.position.y = 2.1 + Math.abs(Math.sin(e.walkPh)) * .06 * mv;
+    if (e.kind === 'aranha') { // pés plantados + IK em coordenadas de mundo; cada pouso perto raspa o chão
+      e.rig.root.position.set(0, 0, 0); e.rig.root.rotation.y = 0;
+      updateSpider(e.rig, e.x + sh, e.z, e.face, dt);
+      for (const l of e.rig.legs) if (l.landed) { l.landed = false; if (d < 14 && Math.random() < .5) footstep(surfaceAt(l.foot.x, l.foot.z), .22 * (1 - d / 14), true); }
     }
     if (d < .75 && !player.dead && !ignore) {
       standUp(); player.san -= 34; player.hurt = 1.2; shake = .5; flash = -.35; glitch = 1.2;
@@ -2397,6 +2495,9 @@ function audioInit() {
   const exitG = AC.createGain(); exitG.gain.value = 0; exitG.connect(master); AU.exit = exitG;
   for (const f of [65.4, 98.1]) { const o = AC.createOscillator(); o.type = 'triangle'; o.frequency.value = f; o.connect(exitG); o.start(); }
   const nb = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate), d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; AU.nb = nb;
+  const br = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate), db = br.getChannelData(0); let last = 0, pk = 0; // ruído marrom: o "peso" dos passos
+  for (let i = 0; i < db.length; i++) { last = (last + .02 * (Math.random() * 2 - 1)) / 1.02; db[i] = last; pk = Math.max(pk, Math.abs(last)); }
+  for (let i = 0; i < db.length; i++) db[i] /= pk; AU.brown = br;
   const hiss = AC.createBufferSource(); hiss.buffer = nb; hiss.loop = true; const hf = AC.createBiquadFilter(); hf.type = 'highpass'; hf.frequency.value = 3000;
   const hg = AC.createGain(); hg.gain.value = 0; hiss.connect(hf); hf.connect(hg); hg.connect(master); hiss.start(); AU.hiss = hg;
   const wind = AC.createBufferSource(); wind.buffer = nb; wind.loop = true; const wf = AC.createBiquadFilter(); wf.type = 'bandpass'; wf.frequency.value = 400; wf.Q.value = .6;
@@ -2412,11 +2513,35 @@ function blip(f0, f1, dur, vol, type = 'square') {
   o.frequency.setValueAtTime(f0, t0); o.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
   gg.gain.setValueAtTime(vol, t0); gg.gain.exponentialRampToValueAtTime(.001, t0 + dur); o.connect(gg); gg.connect(AU.master); o.start(t0); o.stop(t0 + dur + .05);
 }
-function step(v) {
-  const out = kindAt(player.x, player.z) === 'out', rm = out ? null : roomAt(Math.floor(player.x / L.C), Math.floor(player.z / L.C));
-  if (player.sink > .3) { noiseBurst(.28, 650, .7, v * 1.5, 'lowpass'); noiseBurst(.12, 2200, 1.2, v * .6); } // água
-  else if (out) noiseBurst(.12, 2600, .7, v * 1.1); else if (rm && rm.piso === 'carpete') noiseBurst(.09, 420, 1.1, v, 'lowpass'); else noiseBurst(.07, 1200, 1.4, v * 1.2);
+/* passos: um chiado único em banda estreita soava como metal. Agora cada passo é o baque grave do peso (ruído
+   marrom, sem tom) + a textura da superfície em grãos curtos e aleatórios, com ataque suave e calcanhar/ponta
+   separados; tudo varia um pouco a cada passo para não repetir igual */
+function grain(at, dur, freq, q, vol, type = 'bandpass', buf = AU.nb) {
+  const s = AC.createBufferSource(); s.buffer = buf; const f = AC.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+  const gg = AC.createGain(), t0 = AC.currentTime + at; gg.gain.setValueAtTime(0, t0); gg.gain.linearRampToValueAtTime(vol, t0 + Math.min(.006, dur * .2)); gg.gain.exponentialRampToValueAtTime(.0005, t0 + dur);
+  s.connect(f); f.connect(gg); gg.connect(AU.master); s.start(t0, Math.random() * 1.5); s.stop(t0 + dur + .05);
 }
+function surfaceAt(x, z) {
+  if (kindAt(x, z) === 'out') return 'terra';
+  const rm = roomAt(Math.floor(x / L.C), Math.floor(z / L.C)); return rm ? rm.piso : L.pisoDuro;
+}
+function footstep(surf, v, light = false) { // light: pata da aranha — só o toque, sem o baque do peso
+  if (!AC) return; const r = (a, b) => a + Math.random() * (b - a), k = v * r(.8, 1.15);
+  if (surf === 'agua') { grain(0, r(.25, .32), r(450, 700), .7, k * 1.6, 'lowpass', AU.brown); for (let i = 0; i < 4; i++) grain(r(.03, .2), r(.03, .07), r(1200, 2600), .8, k * .2); return; }
+  if (surf === 'terra') { // terra batida, cascalho e folhas: baque surdo + estalinhos espalhados
+    if (!light) grain(0, r(.09, .13), r(150, 230), .7, k * 1.6, 'lowpass', AU.brown);
+    for (let i = 0, n = light ? 3 : 7 + Math.floor(Math.random() * 5); i < n; i++) grain(r(0, light ? .03 : .14), r(.006, .022), r(900, 3200), r(.5, 1), k * r(.06, .18));
+    if (!light) grain(r(.01, .03), r(.07, .11), r(1600, 2400), .3, k * .08, 'highpass'); // arrasto da sola
+  } else if (surf === 'carpete') {
+    grain(0, r(.08, .11), r(200, 300), .6, k * (light ? .5 : 1.3), 'lowpass', AU.brown);
+    if (!light) grain(r(.04, .06), .06, r(450, 650), .5, k * .25, 'lowpass', AU.brown);
+  } else { // ladrilho/concreto: calcanhar e ponta, secos, sem ressonância
+    if (!light) grain(0, r(.04, .06), r(250, 360), .6, k * 1.3, 'lowpass', AU.brown);
+    grain(.002, r(.012, .022), r(1400, 2100), .5, k * (light ? .3 : .14));
+    if (!light) grain(r(.05, .07), r(.03, .045), r(350, 500), .6, k * .55, 'lowpass', AU.brown);
+  }
+}
+function step(v) { footstep(player.sink > .3 ? 'agua' : surfaceAt(player.x, player.z), v); }
 const sfxGlitch = (v = 1) => { noiseBurst(.35 * v, 2400, .6, .3 * v); blip(900, 60, .3 * v, .08 * v, 'sawtooth'); };
 let windT = 0;
 function audioUpdate(dt) {
@@ -2762,12 +2887,12 @@ palBtn.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2;font:14px
 palBtn.onclick = e => { palBtn.blur(); e.shiftKey ? palInput.click() : loadPalette(); };
 document.body.appendChild(palBtn);
 
-/* Trilha de fundo: sound/Trilha1.wav em loop durante a partida (fora do prédio fica em 1%).
+/* Trilha de fundo: sound/Trilha2.mp3 (Trilha2.wav em 160 kbps) em loop durante a partida (fora do prédio fica em 1%).
    A reprodução é liberada no primeiro toque de tecla ou clique (o navegador
    não deixa tocar antes). Volume: controle no canto inferior direito, teclas - e = (±10%), 0 liga/desliga o mudo.
    O volume escolhido fica salvo no navegador. */
-// Trilha1: toca durante toda a partida; fora do prédio cai para 1%
-const bgm = new Audio('sound/Trilha1.wav'); bgm.loop = true; bgm.preload = 'auto'; bgm.volume = 0;
+// Trilha2: toca durante toda a partida; fora do prédio cai para 1%
+const bgm = new Audio('sound/Trilha2.mp3'); bgm.loop = true; bgm.preload = 'auto'; bgm.volume = 0;
 let musicVol = .1, musicMuted = false; // começa baixa: 10%
 try { const v = parseFloat(localStorage.getItem('expediente.vol')); if (v >= 0 && v <= 1) musicVol = v; } catch (e) { }
 const musicUpdate = () => {

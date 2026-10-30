@@ -2051,10 +2051,12 @@ function bfsPath(si, sj, ti, tj) {
   }
   return null;
 }
-function spawnEntity(forceKind = null) {
-  const C = L.C;
+// ahead: nasce lá adiante, numa sala na direção em que o andarilho segue, e fica rondando por lá até vê-lo
+function spawnEntity(forceKind = null, ahead = false) {
+  const C = L.C, fa = Math.atan2(Math.sin(player.face), Math.cos(player.face));
   for (let tries = 0; tries < 30; tries++) {
-    const a = R(0, Math.PI * 2), d = R(17, 25), x = player.x + Math.cos(a) * d, z = player.z + Math.sin(a) * d;
+    const a = ahead ? fa + R(-.7, .7) : R(0, Math.PI * 2), d = ahead ? R(24, 38) : R(17, 25);
+    const x = player.x + (ahead ? Math.sin(a) : Math.cos(a)) * d, z = player.z + (ahead ? Math.cos(a) : Math.sin(a)) * d;
     if (Math.abs(x - player.x) < 10 && z - player.z > -11 && z - player.z < 9) continue;
     const i = Math.floor(x / C), j = Math.floor(z / C);
     if (!bfsPath(i, j, Math.floor(player.x / C), Math.floor(player.z / C))) continue;
@@ -2062,7 +2064,7 @@ function spawnEntity(forceKind = null) {
     const kind = forceKind || 'aranha';
     const rig = kind === 'aranha' ? buildSpider() : kind === 'palha' ? buildStraw() : buildCreature(kind); scene.add(rig.root);
     const e = { rig, kind, anim: new Animator(rig), x: (i + .5) * C, z: (j + .5) * C, face: 0, path: [], repath: 0, stun: 0, lit: false, hunt: false,
-      calm: kind !== 'aranha' && Math.random() < .1, seat: null, sitting: false, seatT: 0, walkPh: 0 }; // 10%: não ataca, só procura uma cadeira para sentar
+      calm: kind !== 'aranha' && Math.random() < .1, seat: null, sitting: false, seatT: 0, walkPh: 0, idle: ahead }; // 10%: não ataca, só procura uma cadeira para sentar
     if (kind === 'lobo') blip(110, 55, 1.2, .12, 'sawtooth'); // uivo grave ao longe
     if (kind === 'aranha') noiseBurst(1.2, 5200, 4, .08);   // patas raspando
     if (kind === 'palha') e.anim.onEvent = name => { // cada passo é um baque grave (com palha estalando); perto, o chão treme
@@ -2080,7 +2082,8 @@ const pron = e => e.kind === 'aranha' ? 'ela' : 'ele';
 function vanish(e, why) {
   scene.remove(e.rig.root); entities.splice(entities.indexOf(e), 1);
   if (e.seat) e.seat.taken = null;
-  spawnT = R(5, 9) - Math.min(3, levelN);
+  // espantada (luz) ou depois de atravessar o andarilho, demora a voltar outra: o susto rende um respiro
+  spawnT = Math.max(spawnT, why === 'luz' ? R(30, 45) - Math.min(10, levelN * 2) : why === 'toque' ? R(18, 28) - Math.min(6, levelN) : R(5, 9));
   if (why === 'luz') { stats.afastados++; showMsg(`${pron(e)} se desfez na luz`); flash = .25; }
   if (why === 'fogo') { if (Math.hypot(e.x - player.x, e.z - player.z) < 20) showMsg(`${pron(e)} virou cinza`); fireSmoke.emit(e.x, .6, e.z, 2.2); return; }
   sfxGlitch(.5);
@@ -2120,7 +2123,7 @@ function updateBurning(e, dt, t, d) {
 function updateEntities(dt, t) {
   spawnT -= dt;
   // se não achou lugar com caminho até o jogador, tenta de novo logo em vez de esperar o ciclo inteiro
-  if (spawnT <= 0 && entities.length < L.ent) spawnT = spawnEntity() ? R(5, 9) : 1;
+  if (spawnT <= 0 && entities.length < L.ent) spawnT = spawnEntity(null, Math.random() < .5) ? R(5, 9) : 1; // metade nasce lá adiante
   const on = player.lanterna && player.bat > 0, C = L.C;
   strawFireLight.intensity = 0;
   for (const e of [...entities]) {
@@ -2130,6 +2133,7 @@ function updateEntities(dt, t) {
     const los = d < 16 && !segBlocked(e.x, e.z, player.x, player.z);
     const ignore = player.seat && player.ignored; // quem está sentado (30% das vezes) some para ela
     e.hunt = !e.calm && !ignore && (los || d < 6);
+    if (e.hunt) e.idle = false; // a que rondava lá adiante viu o andarilho: agora vem atrás
     e.lit = false;
     if (on && d < 11 && los) { const cosA = (-dx * aimX + -dz * aimZ) / Math.max(d, 1e-3); if (cosA > Math.cos(.42)) e.lit = true; }
     if (e.lit) { e.stun += dt; if (e.stun > 1.3) { vanish(e, 'luz'); continue; } }
@@ -2139,7 +2143,7 @@ function updateEntities(dt, t) {
     const speed = e.lit ? 0 : (e.hunt ? Math.min(4.6, 3.3 + levelN * .12) : 1.5) * (e.kind === 'lobo' ? 1.15 : e.kind === 'palha' ? .8 : 1); // a palha é lenta, mas não para
     e.repath -= dt;
     let tx = player.x, tz = player.z;
-    if (ignore) { // vaga de célula em célula, sem rumo
+    if (ignore || e.idle) { // vaga de célula em célula, sem rumo
       e.path = [];
       if (!e.wander || Math.hypot(e.wander[0] - e.x, e.wander[1] - e.z) < .25) { const nb = cellNbrs(Math.floor(e.x / C), Math.floor(e.z / C)), [a, b] = nb.length ? nb[Math.floor(Math.random() * nb.length)] : [Math.floor(e.x / C), Math.floor(e.z / C)]; e.wander = [(a + .5) * C, (b + .5) * C]; }
       [tx, tz] = e.wander;

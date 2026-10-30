@@ -1295,7 +1295,7 @@ function gardenFeatures(lay, ci, cj, B, r) {
         B.box(x - .12, 0, z - .12, x + .12, 1.5, z + .12, .25, 'AC'); B.ico(x, 2.1, z, 1.05, .52, 'VG', .85); B.ico(x + .4, 2.6, z - .3, .6, .6);
       } else if (h < .3 && B.free(x - .75, z - .25, x + .75, z + .25)) { // banco
         B.box(x - .7, .4, z - .22, x + .7, .46, z + .22, .8, 'CL'); B.box(x - .7, .46, z + .16, x + .7, .8, z + .22, .8, 'CL', false);
-        for (const s of [-1, 1]) B.box(x + s * .6 - .05, 0, z - .2, x + s * .6 + .05, .4, z + .2, .3, 'N', false);
+        for (const s of [-1, 1]) { B.box(x + s * .6 - .05, 0, z - .2, x + s * .6 + .05, .4, z + .2, .3, 'N', false); B.chairs.push({ x: x + s * .35, z: z - .03, face: 1, pc: B.pc, taken: null }); } // dois lugares, de costas para o encosto (+z)
       } else if (h < .36 && B.free(x - .55, z - .55, x + .55, z + .55)) { // floreira de pedra com arbusto
         B.box(x - .5, 0, z - .5, x + .5, .55, z + .5, .72, 'PD'); B.ico(x, .85, z, .48, .55, 'VG', .7);
       }

@@ -452,18 +452,18 @@ const hue = c => CLS[c];
 // níveis: o mesmo gerador com outras proporções de salas, jardins e escuridão; depois do 2 se repetem mais fundos
 const SALAS0 = { escritorio: 3, maquinas: 1.6, reuniao: 1, estar: 1, cafe: 1, arquivo: 1, vazio: 1.3, salao: .8 };
 const LEVELS = [
-  { nome: 'Nível 0', sub: 'O Escritório Infinito', criaturas: ['magro'], C: 3, H: 2.6, fora: .36, praca: .35, escuro: .7, quebradas: .07, pisca: .12, ent: 1, listra: .06,
+  { nome: 'Nível 0', sub: 'O Escritório Infinito', criaturas: ['magro'], escritorio: true, C: 3, H: 2.6, fora: .36, praca: .35, escuro: .7, quebradas: .07, pisca: .12, ent: 1, listra: .06,
     pisoDuro: 'ladrilho', salas: SALAS0, tons: { piso: .82, parede: .8, topo: .05 }, frase: 'Os terminais estão ligados. Ninguém digita.' },
-  { nome: 'Nível 1', sub: 'O Arquivo Morto', criaturas: ['magro'], C: 3, H: 3, fora: .28, praca: .5, escuro: .6, quebradas: .18, pisca: .22, ent: 2, listra: 0,
-    pisoDuro: 'concreto', salas: { arquivo: 3, maquinas: 2, vazio: 2, salao: 1.5, escritorio: 1, cafe: .4 }, tons: { piso: .74, parede: .72, topo: .04 }, frase: 'Prateleiras até onde a luz alcança.' },
+  { nome: 'Nível 1', sub: 'O Arquivo Morto', criaturas: ['magro'], C: 3, H: 3, fora: 0, praca: .5, escuro: .6, quebradas: .18, pisca: .22, ent: 2, listra: 0,
+    pisoDuro: 'concreto', salas: { arquivo: 3, maquinas: 2, vazio: 2, salao: 1.5 }, tons: { piso: .74, parede: .72, topo: .04 }, frase: 'Prateleiras até onde a luz alcança.' },
   // pasta "level 2": corredores longos de concreto, círculo de cadeiras em volta de um contorno de giz, parede de televisões, salão tomado pela mata
-  { nome: 'Nível 2', sub: 'Os Corredores de Concreto', criaturas: ['aranha'], paleta: ['#202127', '#44182b', '#223e45', '#672e47', '#2b5c5b', '#933052', '#127068', '#5a6a6f', '#a8446a', '#23877c', '#40988c', '#679793', '#a07e8b', '#2eb49f', '#de5f8a', '#68c9b9', '#ef94a8'], C: 3, H: 2.6, fora: .1, praca: .3, escuro: .62, quebradas: .1, pisca: .2, ent: 2, listra: 0, corredores: true, parede: 'CY',
-    pisoDuro: 'concreto', salas: { vazio: 3, estar: 1.5, arquivo: 1.5, circulo: .6, tvs: 1, mata: 1.5 }, tons: { piso: .7, parede: .62, topo: .04 }, frase: 'Todas as portas estão abertas. Nenhuma leva a lugar nenhum.' },
+  { nome: 'Nível 2', sub: 'Os Corredores de Concreto', criaturas: ['aranha'], paleta: ['#202127', '#44182b', '#223e45', '#672e47', '#2b5c5b', '#933052', '#127068', '#5a6a6f', '#a8446a', '#23877c', '#40988c', '#679793', '#a07e8b', '#2eb49f', '#de5f8a', '#68c9b9', '#ef94a8'], C: 3, H: 2.6, fora: 0, praca: .3, escuro: .62, quebradas: .1, pisca: .2, ent: 2, listra: 0, corredores: true, parede: 'CY',
+    pisoDuro: 'concreto', salas: { vazio: 2, circulo: .8, tvs: 1.5, mata: 2 }, tons: { piso: .7, parede: .62, topo: .04 }, frase: 'Todas as portas estão abertas. Nenhuma leva a lugar nenhum.' },
   // pasta "level 3": campo de cadeiras, torre de vigia, campo de espelhos, canal alagado; o cão preto e os corvos
   { nome: 'Nível 3', sub: 'A Zona', C: 3, H: 2.6, fora: 1, praca: 0, escuro: .6, quebradas: .2, pisca: .2, ent: 2, listra: 0, aberto: true, subs: { campo: .45, espelhos: .35, canal: .2 }, pisoFora: 'relva', criaturas: ['cao', 'bando'], paleta: ['#06021f', '#260109', '#36072f', '#590507', '#423126', '#800104', '#413e5a', '#b40203', '#8f3a1b', '#634b54', '#5a722b', '#757878', '#9b8068', '#e25e4c', '#c97d78', '#b0af9b', '#eeae8e'], corvos: .75, ceu: .45, relva: 'FE', nevoa: { cor: '#634b54', near: -8, far: 10 },
     pisoDuro: 'concreto', salas: { vazio: 2, estar: 1 }, tons: { piso: .55, parede: .6, topo: .04 }, frase: 'Alguém arrumou as cadeiras. Ninguém veio.' },
   // pasta "level4": estrada na névoa, faixas, semáforos e postes com fios; os tripés gigantes
-  { nome: 'Nível 4', sub: 'A Estrada de Névoa', C: 3, H: 2.6, fora: 1, praca: 0, escuro: .6, quebradas: .2, pisca: .2, ent: 2, listra: 0, aberto: true, subs: { estrada: 1 }, pisoFora: 'relva', criaturas: ['tripe'], paleta: ['#05070a', '#161636', '#054417', '#491c38', '#692d50', '#4d4c67', '#2b7143', '#8e3066', '#497473', '#be5364', '#409965', '#7f7974', '#2fc25d', '#98a590', '#4bd849', '#71dc76', '#7eee46'], ceu: .45, relva: 'VD', nevoa: { cor: '#497473', near: -10, far: 6 },
+  { nome: 'Nível 4', sub: 'A Estrada de Névoa', C: 3, H: 2.6, fora: 1, praca: 0, escuro: .6, quebradas: .2, pisca: .2, ent: 2, listra: 0, aberto: true, subs: { estrada: 1 }, pisoFora: 'relva', criaturas: ['tripe'], paleta: ['#05070a', '#161636', '#054417', '#491c38', '#692d50', '#4d4c67', '#2b7143', '#8e3066', '#497473', '#be5364', '#409965', '#7f7974', '#2fc25d', '#98a590', '#4bd849', '#71dc76', '#7eee46'], ceu: .45, relva: 'VD', nevoa: { cor: '#497473', near: -8, far: 11 },
     pisoDuro: 'concreto', salas: { vazio: 2, estar: 1 }, tons: { piso: .55, parede: .6, topo: .04 }, frase: 'O sinal abre. Não vem ninguém. Algo muito alto anda na névoa.' },
 ];
 const SUBS = ['O Escritório Sem Fim', 'As Salas Molhadas', 'O Arquivo Morto', 'O Jardim Podado', 'Os Corredores Que Respiram', 'O Andar Que Não Existe', 'A Sala de Espera', 'O Pátio das Lâmpadas'];
@@ -471,7 +471,7 @@ function levelDef(n) {
   const b = LEVELS[n % LEVELS.length]; if (n < LEVELS.length) return { ...b, n }; // ao fim do ciclo volta ao primeiro tema, mais difícil (hard)
   const x = Math.floor(n / LEVELS.length), r = mulberry32(n * 31 + T.seed);
   return { ...b, n, nome: 'Nível ' + n, sub: SUBS[(n * 5 + T.seed) % SUBS.length], escuro: Math.max(.46, b.escuro - .04 * x),
-    ent: Math.min(4, b.ent + x), fora: clamp(b.fora + (r() - .5) * .2, .15, .8), pisca: Math.min(.5, b.pisca + .05 * x) };
+    ent: Math.min(4, b.ent + x), fora: b.fora === 0 || b.fora === 1 ? b.fora : clamp(b.fora + (r() - .5) * .2, .15, .8), pisca: Math.min(.5, b.pisca + .05 * x) };
 }
 
 /* ========================== utilidades ========================== */
@@ -668,7 +668,7 @@ function clearMemo() { kindMemo.clear(); layMemo.clear(); edgeMemo.clear(); fixM
 
 function chunkKind(ci, cj) {
   const k = ck(ci, cj); let v = kindMemo.get(k); if (v) return v;
-  v = (ci === 0 && cj === 0) ? 'in' : fbm(ci * .45 + 17, cj * .45 + 3, 2, 9) < L.fora ? 'out' : 'in';
+  v = (ci === 0 && cj === 0 && L.fora < 1) ? 'in' : fbm(ci * .45 + 17, cj * .45 + 3, 2, 9) < L.fora ? 'out' : 'in';
   kindMemo.set(k, v); return v;
 }
 const kindAt = (x, z) => chunkKind(Math.floor(x / L.C / CH), Math.floor(z / L.C / CH));
@@ -710,7 +710,7 @@ function layoutIndoor(ci, cj) {
   for (const rm of rooms) {
     const area = rm.w * rm.h, gx = (ci * CH + rm.x0 + rm.w / 2) * L.C, gz = (cj * CH + rm.y0 + rm.h / 2) * L.C;
     rm.type = rm.type || pickType(r, area);
-    if (rm.type !== 'corredor' && rm.w >= 4 && rm.h >= 4 && r() < .06) rm.type = 'piscina'; // rara: a piscina dos balões, em qualquer nível
+    if (L.escritorio && rm.w >= 4 && rm.h >= 4 && r() < .06) rm.type = 'piscina'; // rara: a piscina dos balões
     rm.dark = !(ci === 0 && cj === 0) && rm.type !== 'piscina' && rm.type !== 'circulo' && (rm.type === 'tvs' || (rm.type === 'corredor' ? r() < .05 : fbm(gx * .02 + 91, gz * .02 + 7, 3, 2) > L.escuro || r() < .07)); // as televisões só se iluminam a si mesmas; o círculo fica sempre aceso, para ser lido
     rm.piso = ['reuniao', 'estar', 'vazio', 'salao'].includes(rm.type) ? 'carpete' : rm.type === 'piscina' ? 'ladrilho' : rm.type === 'mata' ? 'cascalho' : L.pisoDuro;
   }
@@ -904,6 +904,7 @@ function makeCrow(grp, x, z, r) {
   return { g, head, wings, x, z, y: 0, fly: false, ph: r() * 6.3, peck: r() * 3, vx: 0, vz: 0, vy: 0 };
 }
 const RED_LAMP = new THREE.MeshBasicMaterial({ color: ctone(1.5, 'AC') }); // semáforos, faróis, luzes dos tripés
+const WIN_LAMP = new THREE.MeshBasicMaterial({ color: ctone(1.1, 'CL') }); // janelas acesas da cidade
 // telas das televisões: quatro imagens em tons de cinza; a estática anda deslizando a textura (updateNoises)
 const TV_MATS = [0, 1, 2, 3].map(kind => {
   const c = document.createElement('canvas'); c.width = 32; c.height = 24; const x = c.getContext('2d'), r = mulberry32(431 + kind * 11);
@@ -1173,7 +1174,7 @@ function furnish(rm, B, r) {
   const t = rm.type;
   // máquina de café: um ponto onde o andarilho enche o copo (a copa tem a sua na bancada)
   const machine = (x, z) => B.machines.push({ key: `${levelN}:m:${Math.round(x * 10)}:${Math.round(z * 10)}`, x, z, vis: 0 });
-  if (t !== 'cafe' && r() < .3) for (let k = 0; k < 4; k++) { // de pé na parede norte, dispensador virado para a sala
+  if (L.escritorio && t !== 'cafe' && r() < .3) for (let k = 0; k < 4; k++) { // de pé na parede norte, dispensador virado para a sala
     const x = X0 + .4 + r() * Math.max(0, W - 1.6);
     if (!B.free(x, Z0, x + .75, Z0 + 1.2, rm)) continue;
     B.group(() => {
@@ -1417,7 +1418,24 @@ function gardenFeatures(lay, ci, cj, B, r) {
     tufts(70);
   }
   if (lay.sub === 'estrada') { // cruzamento na névoa: asfalto (floorGeos), faixas, semáforos, postes com fios, carros largados
-    const r0 = oz + CORR * C, r1 = oz + (CORR + 2) * C, c0 = ox + CORR * C, c1 = ox + (CORR + 2) * C, rm = (r0 + r1) / 2, cm = (c0 + c1) / 2;
+    const r0 = oz + CORR * C, r1 = oz + (CORR + 2) * C, c0 = ox + CORR * C, c1 = ox + (CORR + 2) * C, rm = (r0 + r1) / 2, cm = (c0 + c1) / 2, S = CH * C;
+    // a cidade: prédios em ruína nos quatro quadrantes, com becos nas bordas do bloco para sempre haver passagem
+    const lot = (x0, z0, x1, z1, north) => {
+      if (!B.free(x0, z0, x1, z1)) return;
+      const k = r(), h = north ? 4 + k * 5 : 2.4 + k * 2; // os do lado da câmera são baixos, para não esconder a rua
+      B.box(x0, 0, z0, x1, h, z1, .14 + k * .1, 'AZ');
+      for (let s = 0; s < 3; s++) { const w = (x1 - x0) * (.2 + r() * .25), a = x0 + r() * (x1 - x0 - w), b = z0 + r() * (z1 - z0) * .5; B.box(a, h, b, a + w, h + .4 + r() * 1.4, z1 - r() * .6, .12, 'AZ', false); } // topo quebrado
+      for (let y = .9; y < h - .6; y += 1.25) for (let x = x0 + .4; x < x1 - .6; x += 1.05) { // janelas na fachada sul, de frente para a câmera; poucas acesas
+        if (r() < .12) continue;
+        if (r() < .13) B.lamps.push({ x: x + .25, y: y + .35, z: z1 + .02, s: .42, win: true }); else B.box(x, y, z1, x + .5, y + .7, z1 + .02, .03, 'AZ', false);
+      }
+    };
+    for (const [qx0, qx1] of [[ox + 1.2, c0 - 1.2], [c1 + 1.2, ox + S - 1.2]]) for (const [qz0, qz1, north] of [[oz + 1.2, r0 - 1.2, true], [r1 + 1.2, oz + S - 1.2, false]]) {
+      if (r() < .55) { const m = (qx0 + qx1) / 2; lot(qx0, qz0, m - .6, qz1, north); lot(m + .6, qz0, qx1, qz1, north); } else lot(qx0, qz0, qx1, qz1, north);
+    }
+    for (const z of [r0 - 1, r1]) for (const [a, b] of [[ox, c0 - 1], [c1 + 1, ox + S]]) B.box(a, .03, z, b, .04, z + 1, .5, 'CL', false); // calçadas
+    for (const x of [c0 - 1, c1]) for (const [a, b] of [[oz, r0 - 1], [r1 + 1, oz + S]]) B.box(x, .03, a, x + 1, .04, b, .5, 'CL', false);
+    if (r() < .35) { const x = ox + 1.5 * C, z = r1 + .5; B.group(() => { for (const s of [-1, 1]) B.beam(x + s * .9, 0, z + .3, x + s * .9, 2.3, z + .3, .06, .08); B.box(x - 1.1, 2.3, z - .1, x + 1.1, 2.42, z + .7, .1, 'AZ', false); B.boxesRef.push([x - 1, z + .2, x - .8, z + .4, B.pc], [x + .8, z + .2, x + 1, z + .4, B.pc]); }); } // ponto de ônibus, como na foto
     for (let s = ox + .4; s < ox + CH * C; s += 1.5) if (s + .8 < c0 - 1.6 || s > c1 + 1.6) B.box(s, .04, rm - .05, s + .8, .05, rm + .05, 1, 'CL', false);
     for (let s = oz + .4; s < oz + CH * C; s += 1.5) if (s + .8 < r0 - 1.6 || s > r1 + 1.6) B.box(cm - .05, .04, s, cm + .05, .05, s + .8, 1, 'CL', false);
     for (let k = 0; k < 8; k++) { // faixas de pedestres nos quatro braços
@@ -1440,7 +1458,7 @@ function gardenFeatures(lay, ci, cj, B, r) {
       B.group(() => { B.box(x - 1, .25, z - .5, x + 1, .7, z + .5, .3, 'AZ'); B.box(x - .55, .7, z - .45, x + .5, 1.1, z + .45, .22, 'AZ', false); }); B.lamps.push({ x: x + 1.01, y: .5, z: z - .32, s: .08 }, { x: x + 1.01, y: .5, z: z + .32, s: .08 }); } }
     if (h3(ci, cj, 76) < .4) { const x = ox + 6.5 * C, z = oz + 1.5 * C; if (B.free(x - .3, z - .3, x + .3, z + .3)) { // poste sentinela: um globo de luzes vermelhas, parente dos tripés
       B.group(() => { B.beam(x, 0, z, x, 3.6, z, .09, .06); B.ico(x, 4, z, .5, .08, 'AZ'); B.boxesRef.push([x - .1, z - .1, x + .1, z + .1, B.pc]); }); B.lamps.push({ x, y: 4, z: z + .48, s: .16 }, { x: x + .3, y: 3.75, z: z + .38, s: .07 }); } }
-    tufts(50);
+    tufts(20);
   }
   if (lay.sub === 'praca') {
     for (let a = 0; a < CH; a++) for (let b = 0; b < CH; b++) {
@@ -1525,11 +1543,11 @@ function buildChunk(ci, cj) {
   } else {
     gardenFeatures(lay, ci, cj, B, r);
     if (lay.sub === 'rosas') roses = makeRoses(grp, ci, cj, boxesL, r);
-    if (h3(ci, cj, 97) < .05) for (let k = 0; k < 40 && !broto; k++) { // 5% dos jardins: a figura dos brotos, no meio de uma célula, longe das sebes
+    if (L.escritorio && h3(ci, cj, 97) < .05) for (let k = 0; k < 40 && !broto; k++) { // 5% dos jardins: a figura dos brotos, no meio de uma célula, longe das sebes
       const x = (ci * CH + 1 + Math.floor(r() * (CH - 2)) + .5) * C, z = (cj * CH + 1 + Math.floor(r() * (CH - 2)) + .5) * C;
       if (B.free(x - 1, z - 1, x + 1, z + 1)) { broto = makeBroto(grp, x, z, r); boxesL.push([x - .35, z - .35, x + .35, z + .35]); }
     }
-    if (h3(ci, cj, 81) < (L.corvos || .3)) { // corvos: um bando pousado num canto do jardim
+    if (h3(ci, cj, 81) < (L.corvos || (L.escritorio ? .3 : 0))) { // corvos: um bando pousado num canto do jardim
       const fx = (ci * CH + 1 + r() * (CH - 2)) * C, fz = (cj * CH + 1 + r() * (CH - 2)) * C, n = 3 + Math.floor(r() * 5);
       for (let k = 0; k < n; k++) { const x = fx + (r() - .5) * 5, z = fz + (r() - .5) * 5; if (B.free(x - .2, z - .2, x + .2, z + .2)) crows.push(makeCrow(grp, x, z, r)); }
     }
@@ -1558,7 +1576,10 @@ function buildChunk(ci, cj) {
     mesh.add(glint); mesh.position.set(x, .05, z); mesh.scale.setScalar(1.6); mesh.rotation.y = h3(i, j, 23) * 6.3; mesh.visible = false; grp.add(mesh);
     shards.push({ x, z, type, mesh, glint, t: 0 });
   }
-  if (B.lamps.length) { const list = B.lamps.map(q => new THREE.BoxGeometry(q.s, q.s, .03).translate(q.x, q.y, q.z)); grp.add(new THREE.Mesh(mergeGeometries(list), RED_LAMP)); list.forEach(q => q.dispose()); }
+  for (const [win, mat] of [[false, RED_LAMP], [true, WIN_LAMP]]) { // luzes acesas: semáforos, faróis, janelas
+    const list = B.lamps.filter(q => !!q.win === win).map(q => new THREE.BoxGeometry(q.s, q.s, .03).translate(q.x, q.y, q.z));
+    if (list.length) { grp.add(new THREE.Mesh(mergeGeometries(list), mat)); list.forEach(q => q.dispose()); }
+  }
   TV_MATS.forEach((mat, m) => { // telas agrupadas por imagem; cada uma mostra um pedaço diferente da textura
     const list = B.tvs.filter(q => q.m === m).map(q => { const gg = new THREE.PlaneGeometry(q.w, q.h).translate(q.x, q.y, q.z), uv = gg.attributes.uv, du = r(), dv = r(); for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * .6 + du, uv.getY(k) * .6 + dv); return gg; });
     if (list.length) { grp.add(new THREE.Mesh(mergeGeometries(list), mat)); list.forEach(q => q.dispose()); }
@@ -1944,6 +1965,27 @@ function buildGaunt() {
   }
   return { root, hips, hipsBase: 1.32, k: 1, j, lamp: null, tip: null, kind: 'magro' };
 }
+/* lobo (o cão do nível 3, pasta level 3): grande e magro de quatro patas, peito fundo e cintura fina, juba grossa no
+   pescoço, cabeça baixa com focinho longo e orelhas pontudas, rabo farto caído. Os olhos são fundos: também não enxerga */
+function buildWolf() {
+  const M = new THREE.MeshLambertMaterial({ color: ctone(.05, 'AZ'), flatShading: true }), F = new THREE.MeshLambertMaterial({ color: ctone(.1, 'AZ'), flatShading: true });
+  const root = new THREE.Group(), body = new THREE.Group(); body.position.y = .78; root.add(body);
+  const add = (par, g, m = M) => { const o = new THREE.Mesh(g, m); o.castShadow = true; par.add(o); return o; };
+  const box = (par, w, h, d, x, y, z, m = M) => add(par, new THREE.BoxGeometry(w, h, d).translate(x, y, z), m);
+  const fur = (par, r, x, y, z, sx = 1, sy = 1, sz = 1) => add(par, new THREE.IcosahedronGeometry(r, 0).scale(sx, sy, sz).translate(x, y, z), F);
+  box(body, .3, .36, .6, 0, .02, .2); box(body, .22, .26, .55, 0, .05, -.32); // peito fundo, cintura fina
+  fur(body, .3, 0, .17, .42, 1, .95, 1.2); fur(body, .24, 0, .2, .12, 1, .7, 1.1); fur(body, .17, 0, .16, -.3, 1, .6, 1.5); // juba e pelo do dorso
+  const head = new THREE.Group(); head.position.set(0, .12, .68); head.rotation.x = .3; body.add(head); // cabeça baixa, projetada à frente
+  box(head, .24, .22, .26, 0, 0, .06); box(head, .11, .1, .3, 0, -.04, .32); box(head, .07, .025, .22, 0, -.1, .32, new THREE.MeshBasicMaterial({ color: tone(.8) })); // crânio, focinho, dentes
+  for (const s of [-1, 1]) { const e = add(head, new THREE.ConeGeometry(.055, .22, 4).translate(s * .08, .2, -.02)); e.rotation.z = s * -.12; }
+  const tail = new THREE.Group(); tail.position.set(0, .08, -.58); tail.rotation.x = -.55; body.add(tail); fur(tail, .12, 0, 0, -.28, .8, .8, 2.7); // rabo farto e caído
+  const legs = [[-1, 1], [1, 1], [-1, -1], [1, -1]].map(([sx, sz]) => {
+    const l = new THREE.Group(); l.position.set(sx * .12, -.1, sz > 0 ? .38 : -.5); body.add(l);
+    box(l, .08, .36, .1, 0, -.18, 0); const low = new THREE.Group(); low.position.set(0, -.34, 0); low.rotation.x = sz > 0 ? 0 : .3; l.add(low); box(low, .055, .36, .06, 0, -.17, sz > 0 ? 0 : -.03); box(low, .08, .04, .14, 0, -.33, sz > 0 ? .03 : .02);
+    return l;
+  });
+  return { root, legs, tail, kind: 'cao' };
+}
 /* bando de corvos (pasta level 3): vários pássaros voando juntos. Na ronda ficam altos; ao ouvir, descem em cima do som */
 const BIRD_BODY = new THREE.BoxGeometry(.1, .07, .24), BIRD_WING = new THREE.BoxGeometry(.28, .012, .15).translate(.14, 0, 0), BIRD_MAT = new THREE.MeshLambertMaterial({ color: tone(.04) });
 function buildFlock() {
@@ -2090,8 +2132,9 @@ function startLevel(n) {
   applyPalette(L.paleta || BASE_PAL, true); // cada nível tem a sua (pastas level N/palette)
   const nv = new THREE.Color(L.nevoa ? L.nevoa.cor : 0); scene.fog.color.copy(nv); scene.background.copy(nv); // níveis abertos: névoa na cor da paleta em vez de breu
   player.x = player.z = .5 * L.C; player.face = Math.PI; player.noclipT = 0; player.seat = null; player.ignored = false; player.holding = false; player.holdT = 0;
-  visited = new Map(); exitSeen = false; spawnT = Math.max(5, 9 - n * 2); levelT = 0; placeName = '';
-  buildExit(); updateChunks(player.x, player.z, true); placeCat(); placeWoman(); removeCorner();
+  visited = new Map(); exitSeen = false; spawnT = L.criaturas[0] === 'tripe' ? 8 : Math.max(5, 9 - n * 2); levelT = 0; placeName = '';
+  // cada nível só tem o que é dele: a mulher, o gato, os brotos, a piscina e as cafeteiras ficam no escritório
+  buildExit(); updateChunks(player.x, player.z, true); placeCat(L.escritorio ? CAT_CHANCE : 0); placeWoman(); removeCorner();
   showBanner(L.nome, L.sub);
 }
 function showBanner(title, sub = '') { banner = { title, sub, t: 4 }; }
@@ -2317,7 +2360,7 @@ function hear(e, x, z) {
   if (e.state !== 'investiga' && e.state !== 'escuta') {
     e.state = 'escuta'; e.stateT = hard(.9, .35); // reage cada vez mais rápido
     const v = clamp(1 - Math.hypot(e.x - player.x, e.z - player.z) / 30, 0, 1); // cada uma avisa do seu jeito que ouviu
-    if (e.kind === 'cao') { blip(340, 190, .13, .16 * v, 'sawtooth'); setTimeout(() => blip(320, 170, .15, .16 * v, 'sawtooth'), 190); }
+    if (e.kind === 'cao') { blip(150, 95, .55, .18 * v, 'sawtooth'); noiseBurst(.5, 300, 1.5, .08 * v, 'lowpass'); } // rosnado grave
     if (e.kind === 'bando') caw(v * 1.6);
     if (e.kind === 'tripe') blip(70, 48, 1.1, .14 * v, 'sawtooth');
     if (e.kind === 'magro') noiseBurst(.5, 500, 1.2, .06 * v);
@@ -2428,7 +2471,8 @@ function flee(e) {
 function spawnEntity(forceKind = null, ahead = false) {
   const C = L.C, fa = Math.atan2(Math.sin(player.face), Math.cos(player.face));
   for (let tries = 0; tries < 30; tries++) {
-    const a = ahead ? fa + R(-.7, .7) : R(0, Math.PI * 2), d = ahead ? R(24, 38) : R(17, 25);
+    const big = L.criaturas[0] === 'tripe'; // o tripé nasce mais perto: tem de ser visto andando na névoa
+    const a = ahead && !big ? fa + R(-.7, .7) : R(0, Math.PI * 2), d = big ? R(18, 24) : ahead ? R(24, 38) : R(17, 25);
     const x = player.x + (ahead ? Math.sin(a) : Math.cos(a)) * d, z = player.z + (ahead ? Math.cos(a) : Math.sin(a)) * d;
     if (Math.abs(x - player.x) < 10 && z - player.z > -11 && z - player.z < 9) continue;
     const i = Math.floor(x / C), j = Math.floor(z / C);
@@ -2440,8 +2484,7 @@ function spawnEntity(forceKind = null, ahead = false) {
   return false;
 }
 function addEntity(kind, x, z) {
-  const rig = kind === 'aranha' ? buildSpider() : kind === 'magro' ? buildGaunt() : kind === 'tripe' ? buildTripod() : kind === 'bando' ? buildFlock() : kind === 'cao' ? buildCat(.05, 'AZ') : buildCreature(kind); scene.add(rig.root);
-  if (kind === 'cao') rig.root.scale.setScalar(2.5); // o mesmo corpo de quatro patas do gato, em tamanho de cão
+  const rig = kind === 'aranha' ? buildSpider() : kind === 'magro' ? buildGaunt() : kind === 'tripe' ? buildTripod() : kind === 'bando' ? buildFlock() : kind === 'cao' ? buildWolf() : buildCreature(kind); scene.add(rig.root);
   const e = { rig, kind, anim: new Animator(rig), x, z, face: 0, path: [], repath: 0, stun: 0, lit: false, hunt: false, state: 'ronda', stateT: 0, hearT: R(0, .5), noiseX: 0, noiseZ: 0, walkPh: 0 };
   if (kind === 'aranha') noiseBurst(1.2, 5200, 4, .08);   // patas raspando
   if (kind === 'tripe') blip(62, 44, 1.8, .16, 'sawtooth'); // buzina grave ao longe
@@ -2479,7 +2522,7 @@ function updateEntities(dt, t) {
     if (e.lit && e.state !== 'foge') { e.stun += dt; if (e.stun > hard(1, 2)) scare(e); } // aguenta mais tempo a luz
     else e.stun = Math.max(0, e.stun - dt * .4);
     const stopped = e.state === 'escuta' || (e.lit && e.state !== 'foge');
-    const speed = stopped ? 0 : Math.min(e.kind === 'bando' ? 5.6 : 4.8, (e.hunt ? 3.3 + levelN * .12 : 1.5) * (SPEED_K[e.kind] || 1));
+    const speed = stopped ? 0 : Math.min(e.kind === 'bando' ? 5.6 : 4.8, e.hunt ? (3.3 + levelN * .12) * (SPEED_K[e.kind] || 1) : e.kind === 'tripe' ? 1.8 : 1.5 * (SPEED_K[e.kind] || 1));
     e.repath -= dt;
     let tx = e.x, tz = e.z;
     if (e.state === 'investiga') {
@@ -2493,7 +2536,7 @@ function updateEntities(dt, t) {
       e.path = [];
       if (!e.wander || Math.hypot(e.wander[0] - e.x, e.wander[1] - e.z) < .25) {
         const ci = Math.floor(e.x / C), cj = Math.floor(e.z / C), nb = cellNbrs(ci, cj); let pick = nb.length ? nb[Math.floor(Math.random() * nb.length)] : [ci, cj];
-        if (e.state === 'ronda' && !ignore && nb.length && Math.random() < .35) pick = nb.reduce((b, c) => Math.hypot((c[0] + .5) * C - player.x, (c[1] + .5) * C - player.z) < Math.hypot((b[0] + .5) * C - player.x, (b[1] + .5) * C - player.z) ? c : b);
+        if (e.state === 'ronda' && !ignore && nb.length && Math.random() < (e.kind === 'tripe' ? .8 : .35)) pick = nb.reduce((b, c) => Math.hypot((c[0] + .5) * C - player.x, (c[1] + .5) * C - player.z) < Math.hypot((b[0] + .5) * C - player.x, (b[1] + .5) * C - player.z) ? c : b);
         e.wander = [(pick[0] + .5) * C, (pick[1] + .5) * C];
       }
       [tx, tz] = e.wander;
@@ -2511,7 +2554,7 @@ function updateEntities(dt, t) {
       for (const l of e.rig.legs) if (l.landed) { l.landed = false; if (d < 14 && Math.random() < .5) panned(e.x, () => footstep(surfaceAt(l.foot.x, l.foot.z), .22 * (1 - d / 14), true)); }
     }
     if (e.kind === 'cao') { // quatro patas em trote, rabo balançando
-      e.walkPh += dt * speed * 4.5; e.rig.legs.forEach((l, k) => { l.rotation.x = speed ? Math.sin(e.walkPh + (k === 0 || k === 3 ? 0 : Math.PI)) * .75 : 0; }); e.rig.tail.rotation.y = Math.sin(t * 7) * .4;
+      e.walkPh += dt * speed * 3.2; e.rig.legs.forEach((l, k) => { l.rotation.x = speed ? Math.sin(e.walkPh + (k === 0 || k === 3 ? 0 : Math.PI)) * .75 : 0; }); e.rig.tail.rotation.y = Math.sin(t * 7) * .4;
     }
     if (e.kind === 'tripe') { e.rig.root.position.set(0, 0, 0); e.rig.root.rotation.y = 0; updateTripod(e.rig, e.x, e.z, dt, d, t); }
     if (e.kind === 'bando') {
@@ -2580,6 +2623,7 @@ const fireSmoke = new Smoke(260, .03), cigSmoke = new Smoke(60, .8, .12);
 let woman = null;
 function placeWoman() {
   if (woman) { scene.remove(woman.rig.root); woman = null; }
+  if (!L.escritorio) return;
   const opts = [];
   for (const ch of chunks.values()) for (const c of ch.chairs) { const d = Math.hypot(c.x - player.x, c.z - player.z); if (d > 7 && d < 34 && !c.taken && !c.special) opts.push(c); }
   if (!opts.length) return;
@@ -2707,7 +2751,7 @@ function updateRooms(dt, t) {
     if (roomOnScreen(hit[1])) continue;
     pendingRoom.splice(k, 1);
     if (p.kind === 'fogo') ignite(p.key, ...hit);
-    else if (p.kind === 'canto') placeCorner(hit[1]);
+    else if (p.kind === 'canto' && L.escritorio) placeCorner(hit[1]);
     else { const list = altered.get(p.key) || []; list.push((Math.random() * 4294967295) | 0); altered.set(p.key, list); rebuildChunk(hit[0]); }
     break; // uma por quadro: reconstruir bloco custa
   }

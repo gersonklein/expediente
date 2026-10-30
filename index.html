@@ -449,7 +449,7 @@ const hue = c => CLS[c];
 // níveis: o mesmo gerador com outras proporções de salas, jardins e escuridão; depois do 2 se repetem mais fundos
 const SALAS0 = { escritorio: 3, maquinas: 1.6, reuniao: 1, estar: 1, cafe: 1, arquivo: 1, vazio: 1.3, salao: .8 };
 const LEVELS = [
-  { nome: 'Nível 0', sub: 'O Escritório Infinito', C: 3, H: 2.6, fora: .36, praca: .35, escuro: .7, quebradas: .07, pisca: .12, ent: 1, listra: .06,
+  { nome: 'Nível 0', sub: 'O Escritório Infinito', C: 3, H: 2.6, fora: .36, praca: .35, escuro: .7, quebradas: .07, pisca: .12, ent: 2, listra: .06,
     pisoDuro: 'ladrilho', salas: SALAS0, tons: { piso: .82, parede: .8, topo: .05 }, frase: 'Os terminais estão ligados. Ninguém digita.' },
   { nome: 'Nível 1', sub: 'O Arquivo Morto', C: 3, H: 3, fora: .28, praca: .5, escuro: .6, quebradas: .18, pisca: .22, ent: 2, listra: 0,
     pisoDuro: 'concreto', salas: { arquivo: 3, maquinas: 2, vazio: 2, salao: 1.5, escritorio: 1, cafe: .4 }, tons: { piso: .74, parede: .72, topo: .04 }, frase: 'Prateleiras até onde a luz alcança.' },
@@ -1314,14 +1314,16 @@ function buildChunk(ci, cj) {
     hedges.push(prep(boxGeo(x0, 0, z0, x1, hh, z1, true), v, null, 'VG'), prep(boxGeo(x0 + .1, hh, z0 + .1, x1 - .1, hh + .18, z1 - .1, false), v * 1.08, null, 'VG'));
     boxesL.push([x0, z0, x1, z1]);
   };
-  // batente: montantes, verga e soleira claros (o topo das paredes é quase preto) e mais grossos que a parede —
-  // o vão se lê mesmo na parede vista de perfil
-  const FW = .13, FD = WT + .09, FV = .95;
+  // batente: montantes, verga e soleira claros, só um pouco mais grossos que a parede. Vista de perfil a parede
+  // é só o topo quase preto, e o trecho acima do vão continua essa linha: por isso o topo em cima de cada porta
+  // ganha uma tampa clara (na espessura da parede, sem atravessar nada) — um traço claro marca o vão de qualquer ângulo
+  const FW = .13, FD = WT + .03, FV = .95;
   const doorFrame = (d, c, e) => { // c = centro do vão ao longo da parede, e = linha da parede
     const gh = DOOR / 2, part = (a0, y0, a1, y1, depth) => props.push(prep(d === 0 ? boxGeo(a0, y0, e - depth, a1, y1, e + depth) : boxGeo(e - depth, y0, a0, e + depth, y1, a1), FV, null, 'AC'));
     part(c - gh - FW, 0, c - gh, 2.1 + FW, FD); part(c + gh, 0, c + gh + FW, 2.1 + FW, FD);   // montantes
     part(c - gh - FW, 2.1, c + gh + FW, 2.1 + FW, FD);                                       // verga
     part(c - gh, 0, c + gh, .025, FD - .03);                                                 // soleira
+    part(c - gh, H, c + gh, H + .015, WT);                                                   // tampa clara no topo, sobre o vão
   };
   // sebe só passa do canto da célula se o canto inteiro for jardim; encostada num prédio para na face da parede
   const outAt = (px, pz) => kindAt(px, pz) === 'out';
@@ -1624,36 +1626,50 @@ function buildCat(v, cls) {
 }
 /* aranha (pasta Aranha): o sistema da aranha-3d.html — cada pé fica plantado no chão e só dá o passo (em arco,
    adiantado pela velocidade) quando se afasta demais do seu ponto de descanso; uma pata só levanta com as vizinhas
-   apoiadas (gait alternado); IK de 3 ossos com o joelho dobrando para cima e o tarso quase vertical; o abdômen segue
-   o cefalotórax em corrente, com dobra limitada; leve bob e inclinação nas curvas. Tudo em coordenadas de mundo:
-   o root fica na origem e updateSpider posiciona corpo e pernas a cada quadro */
-const SPIDER = { bodyY: 1.3, femur: 1.4, tibia: 1.6, tarsus: .32, reach: 1.85, hipW: .15, spread: [38, 150], scale: [1.05, .95, .9, 1],
-  stepTh: .55, stepDur: .16, stepH: .42, lead: 1.4, abd: .6, maxBend: 35 * D2R };
+   apoiadas (gait alternado); pata de 8 segmentos como no vídeo — coxa curta saindo do quadril, fêmur (2 peças) e
+   o trecho de baixo (patela, tíbia, metatarso, basitarso), cada trecho num arco suave para fora/cima, resolvidos por
+   IK de 2 ossos (coxa→tornozelo) com o joelho dobrando para cima, mais o tarso quase vertical; cada junta tem um nó;
+   o abdômen segue o cefalotórax em corrente, com dobra limitada; leve bob e inclinação nas curvas. Tudo em
+   coordenadas de mundo: o root fica na origem e updateSpider posiciona corpo e pernas a cada quadro */
+// SZ: tamanho da aranha (1 = o original). upper/lower: peças do fêmur e do osso de baixo do IK, em frações (somam 1);
+// bowU/bow: arco de cada trecho (fração do comprimento)
+const SZ = .7;
+const SPIDER = { bodyY: 1.3 * SZ, coxa: .2 * SZ, femur: 1.3 * SZ, tibia: 1.7 * SZ, upper: [.48, .52], bowU: .05, lower: [.1, .3, .35, .25], bow: .08,
+  tarsus: .32 * SZ, reach: 1.85 * SZ, hipW: .15 * SZ, spread: [38, 150], scale: [1.05, .95, .9, 1],
+  stepTh: .55 * SZ, stepDur: .14, stepH: .42 * SZ, lead: 1.4, abd: .6 * SZ, maxBend: 35 * D2R };
+const SPIDER_NJ = SPIDER.upper.length + SPIDER.lower.length + 3; // juntas do quadril ao pé
 const lerp = (a, b, t) => a + (b - a) * t;
 let SPIDER_GEO = null;
 function buildSpider() {
+  // caranguejeira: pernas grossas que quase não afinam (só a ponta), corpo robusto e peludo
+  const T = 2.6; // espessura das pernas (raios dos ossos e dos nós), relativa ao tamanho SZ
+  // raio em cada junta, do quadril ao pé
+  const RJ = Array.from({ length: SPIDER_NJ }, (_, k) => lerp(.05, .02, (k / (SPIDER_NJ - 1)) ** 1.6) * T * SZ);
   SPIDER_GEO = SPIDER_GEO || { // cilindros de altura 1, afinando para a ponta (o topo fica no fim do osso)
-    femur: new THREE.CylinderGeometry(.03, .042, 1, 4), tibia: new THREE.CylinderGeometry(.016, .03, 1, 4),
-    tarsus: new THREE.CylinderGeometry(.005, .016, 1, 4), knee: new THREE.IcosahedronGeometry(.045, 0),
-    ceph: new THREE.IcosahedronGeometry(.24, 0).scale(1, .72, 1.15), abd: new THREE.IcosahedronGeometry(.4, 1).scale(1, .85, 1.3).translate(0, .06, -.34),
+    bones: RJ.slice(1).map((r, k) => new THREE.CylinderGeometry(r, RJ[k], 1, 6)),
+    joints: RJ.slice(1, -1).map(r => new THREE.IcosahedronGeometry(r * 1.15, 0)), // nós nas juntas, como os pontos do vídeo
+    ceph: new THREE.IcosahedronGeometry(.28, 1).scale(1, .7, 1.15), abd: new THREE.IcosahedronGeometry(.5, 1).scale(1, .85, 1.2).translate(0, .08, -.44),
+    cephF: strands(70, .28, .2, .32, 0, .03, .08, 93), abdF: strands(160, .5, .42, .6, .08, .04, .12, 94).translate(0, 0, -.44), // pelos curtos
   };
   const M = new THREE.MeshLambertMaterial({ color: ctone(.04, 'N'), flatShading: true });
+  const F = new THREE.MeshLambertMaterial({ color: ctone(.11, 'N'), flatShading: true }); // pelos um tom acima, para a silhueta ler felpuda
   const mesh = (gg, par, mat = M) => { const m = new THREE.Mesh(gg, mat); m.castShadow = true; par.add(m); return m; };
   const root = new THREE.Group(), head = new THREE.Group(), abd = new THREE.Group(); root.add(head, abd);
-  head.rotation.order = abd.rotation.order = 'YXZ';
-  mesh(SPIDER_GEO.ceph, head); mesh(SPIDER_GEO.abd, abd);
+  head.rotation.order = abd.rotation.order = 'YXZ'; head.scale.setScalar(SZ); abd.scale.setScalar(SZ); // corpo, olhos e quelíceras na mesma escala
+  mesh(SPIDER_GEO.ceph, head); mesh(SPIDER_GEO.abd, abd); mesh(SPIDER_GEO.cephF, head, F); mesh(SPIDER_GEO.abdF, abd, F);
   const eye = new THREE.MeshBasicMaterial({ color: tone(.85) });
-  for (const [x, y, z, w] of [[.06, .07, .25, .045], [.13, .05, .21, .03], [.03, .1, .2, .025]]) for (const s of [-1, 1]) {
+  for (const [x, y, z, w] of [[.06, .1, .3, .05], [.13, .08, .26, .035], [.03, .14, .25, .03]]) for (const s of [-1, 1]) {
     const e = new THREE.Mesh(new THREE.BoxGeometry(w, w * .75, .02), eye); e.position.set(s * x, y, z); head.add(e); // olhos: um par grande e dois pequenos
   }
-  for (const s of [-1, 1]) { const q = mesh(new THREE.BoxGeometry(.05, .05, .16).translate(0, 0, .08), head); q.position.set(s * .07, -.06, .24); q.rotation.set(.5, s * .25, 0); } // quelíceras
+  for (const s of [-1, 1]) { const q = mesh(new THREE.BoxGeometry(.09, .09, .2).translate(0, 0, .1), head); q.position.set(s * .07, -.06, .28); q.rotation.set(.6, s * .2, 0); } // quelíceras grossas
   const legs = [], bySide = { '-1': [], '1': [] };
   for (let k = 0; k < 4; k++) for (const side of [-1, 1]) {
     const s = SPIDER.scale[k], V = () => new THREE.Vector3();
-    const leg = { k, side, localX: lerp(.12, -.12, k / 3), theta: lerp(SPIDER.spread[0], SPIDER.spread[1], k / 3) * D2R,
-      femur: SPIDER.femur * s, tibia: SPIDER.tibia * s, tarsus: SPIDER.tarsus * s, reach: SPIDER.reach * s,
-      hip: V(), knee: V(), ankle: V(), end: V(), rest: V(), foot: V(), from: V(), to: V(), stepping: false, t: 0,
-      mF: mesh(SPIDER_GEO.femur, root), mT: mesh(SPIDER_GEO.tibia, root), mA: mesh(SPIDER_GEO.tarsus, root), mK: mesh(SPIDER_GEO.knee, root) };
+    const leg = { k, side, localX: lerp(.12, -.12, k / 3) * SZ, theta: lerp(SPIDER.spread[0], SPIDER.spread[1], k / 3) * D2R,
+      coxa: SPIDER.coxa * s, femur: SPIDER.femur * s, tibia: SPIDER.tibia * s, tarsus: SPIDER.tarsus * s, reach: SPIDER.reach * s,
+      hip: V(), coxaEnd: V(), knee: V(), ankle: V(), end: V(), rest: V(), foot: V(), from: V(), to: V(), stepping: false, t: 0,
+      pts: Array.from({ length: SPIDER_NJ }, V), // juntas do quadril ao pé
+      bones: SPIDER_GEO.bones.map(gg => mesh(gg, root)), nodes: SPIDER_GEO.joints.map(gg => mesh(gg, root)) };
     bySide[side].push(leg); legs.push(leg);
   }
   for (const l of legs) l.neighbors = [bySide[l.side][l.k - 1], bySide[l.side][l.k + 1], bySide[-l.side][l.k]].filter(Boolean);
@@ -1671,6 +1687,16 @@ function solveKnee(hip, tgt, L1, L2, outKnee, outEnd) { // IK de 2 ossos: joelho
   const a = (L1 * L1 - L2 * L2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, L1 * L1 - a * a));
   outKnee.copy(hip).addScaledVector(u, a).addScaledVector(w, h); outEnd.copy(hip).addScaledVector(u, d);
 }
+// divide o osso a→b nas frações fr (somam 1): escreve as juntas do meio em P a partir de n, empurradas num arco
+// perpendicular ao osso no plano vertical (para cima/fora); devolve o próximo índice livre
+const _ad = new THREE.Vector3(), _aw = new THREE.Vector3();
+function arcJoints(P, n, a, b, fr, bow, hx, hz) {
+  const du = _ad.subVectors(b, a), len = du.length() || 1e-6; du.divideScalar(len);
+  const bw = _aw.copy(_sUp).addScaledVector(du, -du.y); if (bw.lengthSq() < 1e-6) bw.set(hx, 0, hz); bw.normalize();
+  let f = 0;
+  for (let k = 0; k < fr.length - 1; k++) { f += fr[k]; P[n++].copy(a).addScaledVector(du, len * f).addScaledVector(bw, Math.sin(Math.PI * f) * bow * len); }
+  return n;
+}
 function updateSpider(rig, x, z, face, dt) {
   const S = SPIDER, wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
   if (!rig.placed) { rig.px = x; rig.pz = z; rig.pf = rig.vf = face; rig.ax = x - Math.sin(face) * S.abd; rig.az = z - Math.cos(face) * S.abd; }
@@ -1683,9 +1709,9 @@ function updateSpider(rig, x, z, face, dt) {
   // abdômen em corrente atrás do cefalotórax
   const af = face + clamp(wrap(Math.atan2(x - rig.ax, z - rig.az) - face), -S.maxBend, S.maxBend);
   rig.af = af; rig.ax = x - Math.sin(af) * S.abd; rig.az = z - Math.cos(af) * S.abd;
-  const y = S.bodyY + Math.sin(rig.time * 9) * .04 * moving, roll = clamp(rig.turn * .06, -.25, .25);
+  const y = S.bodyY + Math.sin(rig.time * 9) * .04 * SZ * moving, roll = clamp(rig.turn * .06, -.25, .25);
   rig.head.position.set(x, y, z); rig.head.rotation.set(0, face, roll);
-  rig.abd.position.set(x, y + .02, z); rig.abd.rotation.set(-.12 + Math.sin(rig.time * 9 - .7) * .03 * moving, af, roll * .5);
+  rig.abd.position.set(x, y + .02 * SZ, z); rig.abd.rotation.set(-.12 + Math.sin(rig.time * 9 - .7) * .03 * moving, af, roll * .5);
   // patas: quadril e ponto de descanso acompanham o corpo; o pé fica plantado até o erro passar do limiar
   const fx = Math.sin(face), fz = Math.cos(face), rx = Math.cos(face), rz = -Math.sin(face); // frente e lateral (+x local)
   for (const l of rig.legs) {
@@ -1706,10 +1732,17 @@ function updateSpider(rig, x, z, face, dt) {
       l.foot.lerpVectors(l.from, l.to, t * t * (3 - 2 * t)); l.foot.y = Math.sin(Math.PI * t) * S.stepH;
       if (l.t >= 1) { l.stepping = false; l.foot.y = 0; l.landed = true; }
     }
-    const ox = l.foot.x - l.hip.x, oz = l.foot.z - l.hip.z, oh = Math.hypot(ox, oz) || 1;
-    l.ankle.set(l.foot.x + ox / oh * l.tarsus * .25, l.foot.y + l.tarsus, l.foot.z + oz / oh * l.tarsus * .25);
-    solveKnee(l.hip, l.ankle, l.femur, l.tibia, l.knee, l.end);
-    placeBone(l.mF, l.hip, l.knee); placeBone(l.mT, l.knee, l.end); placeBone(l.mA, l.end, l.foot); l.mK.position.copy(l.knee);
+    const ox = l.foot.x - l.hip.x, oz = l.foot.z - l.hip.z, oh = Math.hypot(ox, oz) || 1, hx = ox / oh, hz = oz / oh;
+    l.coxaEnd.set(l.hip.x + hx * l.coxa, l.hip.y + l.coxa * .35, l.hip.z + hz * l.coxa); // coxa curta, para fora e um pouco para cima
+    l.ankle.set(l.foot.x + hx * l.tarsus * .25, l.foot.y + l.tarsus, l.foot.z + hz * l.tarsus * .25);
+    solveKnee(l.coxaEnd, l.ankle, l.femur, l.tibia, l.knee, l.end);
+    // quadril → coxa → fêmur em peças → joelho → patela/tíbia/metatarso/basitarso → tornozelo → pé
+    const P = l.pts; let n = 0;
+    P[n++].copy(l.hip); P[n++].copy(l.coxaEnd);
+    n = arcJoints(P, n, l.coxaEnd, l.knee, S.upper, S.bowU, hx, hz); P[n++].copy(l.knee);
+    n = arcJoints(P, n, l.knee, l.end, S.lower, S.bow, hx, hz); P[n++].copy(l.end); P[n++].copy(l.foot);
+    for (let k = 0; k < l.bones.length; k++) placeBone(l.bones[k], P[k], P[k + 1]);
+    for (let k = 0; k < l.nodes.length; k++) l.nodes[k].position.copy(P[k + 1]);
   }
 }
 /* Corpos com as mesmas juntas do andarilho (as poses do atlas servem para todos):
@@ -1838,7 +1871,7 @@ function startLevel(n) {
   clearMemo(); lastChunk = '';
   CUT.uListra.value = L.listra;
   player.x = player.z = .5 * L.C; player.face = Math.PI; player.noclipT = 0; player.seat = null; player.ignored = false;
-  visited = new Map(); exitSeen = false; spawnT = Math.max(12, 28 - n * 4); levelT = 0; placeName = '';
+  visited = new Map(); exitSeen = false; spawnT = Math.max(5, 9 - n * 2); levelT = 0; placeName = '';
   buildExit(); updateChunks(player.x, player.z, true); placeCat(); placeWoman(); removeCorner();
   showBanner(L.nome, L.sub);
 }
@@ -2039,14 +2072,15 @@ function spawnEntity(forceKind = null) {
       if (d < 8) shake = Math.max(shake, .14 * (1 - d / 8));
     };
     if (kind === 'palha') { e.igniteT = Math.random() < .1 ? R(4, 25) : -1; e.burnT = 0; } // 10%: vai pegar fogo daqui a pouco
-    e.anim.play('Walk_Neutral'); entities.push(e); return;
+    e.anim.play('Walk_Neutral'); entities.push(e); return true;
   }
+  return false;
 }
 const pron = e => e.kind === 'aranha' ? 'ela' : 'ele';
 function vanish(e, why) {
   scene.remove(e.rig.root); entities.splice(entities.indexOf(e), 1);
   if (e.seat) e.seat.taken = null;
-  spawnT = R(14, 24) - Math.min(8, levelN * 1.5);
+  spawnT = R(5, 9) - Math.min(3, levelN);
   if (why === 'luz') { stats.afastados++; showMsg(`${pron(e)} se desfez na luz`); flash = .25; }
   if (why === 'fogo') { if (Math.hypot(e.x - player.x, e.z - player.z) < 20) showMsg(`${pron(e)} virou cinza`); fireSmoke.emit(e.x, .6, e.z, 2.2); return; }
   sfxGlitch(.5);
@@ -2085,12 +2119,13 @@ function updateBurning(e, dt, t, d) {
 }
 function updateEntities(dt, t) {
   spawnT -= dt;
-  if (spawnT <= 0 && entities.length < L.ent) { spawnEntity(); spawnT = R(10, 20); }
+  // se não achou lugar com caminho até o jogador, tenta de novo logo em vez de esperar o ciclo inteiro
+  if (spawnT <= 0 && entities.length < L.ent) spawnT = spawnEntity() ? R(5, 9) : 1;
   const on = player.lanterna && player.bat > 0, C = L.C;
   strawFireLight.intensity = 0;
   for (const e of [...entities]) {
     const dx = player.x - e.x, dz = player.z - e.z, d = Math.hypot(dx, dz);
-    if (d > 45) { scene.remove(e.rig.root); entities.splice(entities.indexOf(e), 1); if (e.seat) e.seat.taken = null; continue; }
+    if (d > 45) { scene.remove(e.rig.root); entities.splice(entities.indexOf(e), 1); if (e.seat) e.seat.taken = null; spawnT = Math.min(spawnT, R(3, 6)); continue; } // ficou para trás: outra surge logo
     if (e.kind === 'palha' && updateBurning(e, dt, t, d)) continue;
     const los = d < 16 && !segBlocked(e.x, e.z, player.x, player.z);
     const ignore = player.seat && player.ignored; // quem está sentado (30% das vezes) some para ela
@@ -2429,13 +2464,18 @@ function updateBalloons(dt, t) {
   }
 }
 
-// --- o gato: anda solto de célula em célula, às vezes senta; cada nível sorteia onde ele aparece ---
-function placeCat() {
+// --- o gato: raro — só aparece em CAT_CHANCE dos níveis, longe, e se ficar para trás quase nunca volta;
+//     anda solto de célula em célula, às vezes senta; encontrá-lo restaura a sanidade ---
+const CAT_CHANCE = .3, CAT_BACK = .2;
+function hideCat() { cat.on = false; cat.x = cat.z = 1e6; cat.rig.root.visible = false; } // longe de tudo: rosas e balões o ignoram
+function placeCat(chance = CAT_CHANCE) {
   if (!cat) { const r0 = Math.random(); cat = { rig: buildCat(r0 < .5 ? .3 : .4, r0 < .5 ? 'AZ' : 'AC') }; cat.rig.root.scale.setScalar(1.35); scene.add(cat.rig.root); } // um pouco maior que o real, para ler no quadro de 256 px
+  if (Math.random() >= chance) { hideCat(); return; }
+  cat.on = true; cat.rig.root.visible = true;
   const C = L.C, pi = Math.floor(player.x / C), pj = Math.floor(player.z / C);
   let x = player.x + 6, z = player.z;
   for (let tries = 0; tries < 40; tries++) {
-    const a = Math.random() * Math.PI * 2, d = 8 + Math.random() * 16, i = Math.floor((player.x + Math.cos(a) * d) / C), j = Math.floor((player.z + Math.sin(a) * d) / C);
+    const a = Math.random() * Math.PI * 2, d = 16 + Math.random() * 14, i = Math.floor((player.x + Math.cos(a) * d) / C), j = Math.floor((player.z + Math.sin(a) * d) / C);
     const cx = (i + .5) * C, cz = (j + .5) * C;
     if (!isFree(cx, cz, .25) || !bfsPath(i, j, pi, pj)) continue;
     x = cx; z = cz; break;
@@ -2451,9 +2491,9 @@ function catNext() {
 }
 function meow() { blip(520, 780, .12, .05, 'sine'); setTimeout(() => blip(780, 430, .3, .05, 'sine'), 110); }
 function updateCat(dt, t) {
-  if (!cat) return;
+  if (!cat || !cat.on) return;
   const d = Math.hypot(cat.x - player.x, cat.z - player.z);
-  if (d > 50) { placeCat(); return; }
+  if (d > 50) { placeCat(CAT_BACK); return; }
   let moving = false;
   if (cat.sit > 0) { cat.sit -= dt; if (cat.sit <= 0) catNext(); }
   else {
@@ -2476,7 +2516,7 @@ function updateCat(dt, t) {
   c.head.rotation.y = moving ? 0 : Math.sin(t * .6 + cat.face) * .6;
   c.tail.rotation.y = Math.sin(t * (moving ? 3 : 1.4)) * .4;
   c.root.position.set(cat.x, 0, cat.z); c.root.rotation.y = cat.face;
-  if (d < 3 && !cat.met) { cat.met = true; showMsg('um gato'); meow(); }
+  if (d < 3 && !cat.met) { cat.met = true; player.san = 100; showMsg('um gato — a sanidade volta'); meow(); flash = .2; }
   cat.meowT -= dt; if (cat.meowT <= 0) { cat.meowT = 8 + Math.random() * 14; if (d < 10) meow(); }
 }
 function updateItems(t) { for (const ch of chunks.values()) for (const it of ch.items) it.mesh.position.y = .35 + Math.sin(t * 2 + it.ph) * .08; }
@@ -2895,9 +2935,15 @@ document.body.appendChild(palBtn);
 const bgm = new Audio('sound/Trilha2.mp3'); bgm.loop = true; bgm.preload = 'auto'; bgm.volume = 0;
 let musicVol = .1, musicMuted = false; // começa baixa: 10%
 try { const v = parseFloat(localStorage.getItem('expediente.vol')); if (v >= 0 && v <= 1) musicVol = v; } catch (e) { }
-const musicUpdate = () => {
+// fade longo ao entrar/sair do prédio e ao começar/terminar a partida (~5 s até assentar); sem dt (slider, mudo) o volume pula direto
+const MUSIC_FADE = 1.6;
+let musicCur = 0;
+const musicUpdate = dt => {
   const playing = game === 'play' || game === 'note' || game === 'map';
-  bgm.volume = !musicMuted && playing ? (kindAt(player.x, player.z) === 'out' ? .01 : musicVol) : 0;
+  const target = !musicMuted && playing ? (kindAt(player.x, player.z) === 'out' ? .01 : musicVol) : 0;
+  musicCur = dt === undefined ? target : musicCur + (target - musicCur) * (1 - Math.exp(-dt / MUSIC_FADE));
+  if (Math.abs(target - musicCur) < .0005) musicCur = target;
+  bgm.volume = clamp(musicCur, 0, 1);
 };
 const musicApply = () => { musicUpdate(); volRange.value = Math.round(musicVol * 100); volLbl.textContent = musicMuted || musicVol === 0 ? '♪ MUDO' : `♪ ${Math.round(musicVol * 100)}%`; };
 const musicSet = v => { musicVol = clamp(v, 0, 1); musicMuted = false; try { localStorage.setItem('expediente.vol', musicVol); } catch (e) { } musicApply(); };
@@ -3034,7 +3080,7 @@ function frame() {
   // copo na mão esquerda; a cada gole o braço sobe até a boca
   prig.cup.visible = player.cafe > 0 && !player.dead;
   if (game === 'play' && prig.cup.visible && player.anim.cur !== 'Hit_Front_Light') { const k = Math.sin(clamp(player.sip / .5, 0, 1) * Math.PI); prig.j.arm_L.o.rotation.x = -(30 + k * 70) * D2R; prig.j.fore_L.o.rotation.x = -(55 + k * 45) * D2R; }
-  musicUpdate();
+  musicUpdate(dt);
   audioUpdate(dt);
   cameraAndRender(dt, t);
 }

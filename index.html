@@ -878,57 +878,71 @@ function makeCrow(grp, x, z, r) {
   g.position.set(x, 0, z); g.rotation.y = r() * 6.3; grp.add(g);
   return { g, head, wings, x, z, y: 0, fly: false, ph: r() * 6.3, peck: r() * 3, vx: 0, vz: 0, vy: 0 };
 }
+// cacos: lascas escuras achatadas no chão com um brilho que pisca por cima, para ler tanto no chão claro quanto no escuro;
+// só existem dentro do cone da lanterna (updateShards)
+const shardGeo = (list, y) => mergeGeometries(list.map(([w, d, x, z]) => new THREE.BoxGeometry(w, .012, d).translate(x, y, z)));
+const SHARD_GEO = shardGeo([[.26, .07, 0, -.04], [.14, .14, .16, .09], [.1, .18, -.17, .11]], .02), SHARD_GLINT = shardGeo([[.12, .05, .02, -.04], [.07, .07, .16, .09]], .03);
+const SHARD_DARK = new THREE.MeshBasicMaterial({ color: ctone(.1, 'AZ') });
+const SHARD_MATS = ['CY', 'CL', 'PD'].map(c => new THREE.MeshBasicMaterial({ color: ctone(1.4, c) })); // vidro, metal, tábua
 /* roseiral (skill metal-dither-sprites): roseira = sprite pixel-art em pé — silhueta orgânica, centenas de cópias,
    menor que o andarilho. Texel casado ao quadro de 256 px no zoom padrão (24): PX = 2·24·tan16°/256, e em Y
    PY = PX / cos58° porque o plano é vertical e a câmera olha 58° para baixo. 3 tons de folha + 3 de flor, borda de
    luz do lado do sol, alfa 0/1. Cada variante tem a malha visível (de frente para a câmera) e o recorte de sombra
    (de frente para o sol). Cada roseira se inclina um pouco para longe de quem passa perto e volta devagar.
-   Forma: touceira arredondada (união de bolhas) com borda recortada de folhas, sombreada do sol para o lado oposto,
-   hastes curtas aparecendo no pé, uma ou duas varas espinhosas passando do topo com botão, e rosas abertas
-   (miolo escuro e pétalas em volta) espalhadas pela metade de cima */
-const RPX = 2 * 24 * Math.tan(16 * D2R) / 256, RPY = RPX / Math.cos(58 * D2R), ROSE_W = 13, ROSE_H = 12;
+   Forma: a rosa de pixel/ (grade 23x37) redesenhada em 13x19 texels para ficar na altura do andarilho: flor com a
+   espiral das pétalas, haste fina com espinho e duas folhas pontudas. Variantes: normal, mais baixa e em botão, cada
+   uma também espelhada (a borda de luz vem depois do espelho, sempre do lado do sol). Sem escala: quebraria a haste de 1 px */
+const RPX = 2 * 24 * Math.tan(16 * D2R) / 256, RPY = RPX / Math.cos(58 * D2R), ROSE_W = 13, ROSE_H = 19;
+const ROSE_ART = [
+  '....fffff....',
+  '..ffrrrrfff..',
+  '.f.frffrrfff.',
+  '.ffrfrrfffrf.',
+  '.fffrffrrrff.',
+  '..fffrrfffff.',
+  '..rfffrfffff.',
+  '..frdfdffff..',
+  '...fddfdff...',
+  '....ddddd....',
+  '......e......',
+  '......e...mcc',
+  'ccm...e..mmc.',
+  '.cmm..e.mmc..',
+  '..mmm.e.mm...',
+  '...mmmee.....',
+  '......e.e....',
+  '.....ee......',
+  '......e......',
+];
+const ROSE_BUD = [
+  '.............',
+  '.............',
+  '.............',
+  '.............',
+  '.............',
+  '.....fff.....',
+  '....ffrff....',
+  '....frfff....',
+  '.....fdf.....',
+  '.....ddd.....',
+];
 const ROSE_VARS = (() => {
-  const col = { e: '#4d4447', m: '#758787', c: '#9ab0a5', f: '#f79d8a', d: '#9a807b', h: '#dba79c' };
-  const sunLeft = SUN_DIR.x < 0, sx = sunLeft ? -1 : 1, out = [];
-  for (let v = 0; v < 8; v++) {
-    const r = mulberry32(911 + v * 7), px = Array.from({ length: ROSE_H }, () => Array(ROSE_W).fill('.'));
-    const set = (x, y, k) => { if (x >= 0 && y >= 0 && x < ROSE_W && y < ROSE_H) px[y][x] = k; };
-    const get = (x, y) => px[y]?.[x];
-    // touceira: 4–6 bolhas, apoiada a ~2 px do chão; a borda perde pixels ao acaso (folhas recortadas)
-    const blobs = Array.from({ length: 5 + (r() * 3 | 0) }, (_, k) => [6 + (r() - .5) * (k ? 7 : 2), 4.5 + r() * 3.5, 2.4 + r() * 1.3]);
-    for (let y = 0; y < ROSE_H - 2; y++) for (let x = 0; x < ROSE_W; x++) {
-      let depth = -9; for (const [cx, cy, rad] of blobs) depth = Math.max(depth, rad - Math.hypot(x - cx, (y - cy) * 1.1));
-      if (depth < 0 || (depth < .8 && r() < .3)) continue;
-      const lit = .5 + .38 * (x - 6) / 6 * sx - .5 * (y - 4) / 7 + (r() - .5) * .55; // sol de um lado e de cima
-      set(x, y, lit > .66 ? 'c' : lit > .22 ? 'm' : 'e');
-      if (depth > 1.5 && r() < .08) set(x, y, 'e'); // vãos escuros entre as folhas
-    }
-    let bottom = 0; for (let y = 0; y < ROSE_H; y++) if (px[y].some(k => k !== '.')) bottom = y;
-    for (let s = 0; s < 2 + (r() * 2 | 0); s++) { let x = 4 + (r() * 5 | 0); for (let y = ROSE_H - 1; y > bottom - 1; y--) set(x, y, 'e'); } // hastes no pé
-    for (let s = 0; s < 1 + (r() < .6 ? 1 : 0); s++) { // vara espinhosa passando do topo, com botão na ponta
-      let x = 3 + (r() * 7 | 0), y = 0; while (y < ROSE_H && get(x, y) === '.') y++;
-      const dx = x < 6 ? -1 : 1, len = 2 + (r() * 2 | 0);
-      for (let k = 0; k < len && y > 0; k++) { y--; if (r() < .45) x += dx; set(x, y, 'e'); if (r() < .35) set(x - dx, y, 'e'); }
-      set(x, y - 1, 'f'); set(x, y, 'd');
-    }
-    // rosas abertas: miolo escuro, pétalas em cruz, brilho do lado do sol; pequenas 2x2 completam
-    const blooms = [];
-    for (let tries = 0, want = 2 + (r() * 3 | 0); tries < 40 && blooms.length < want; tries++) {
-      const x = 1 + (r() * (ROSE_W - 2) | 0), y = 1 + (r() * 6 | 0);
-      if (get(x, y) === '.' || blooms.some(([bx, by]) => Math.abs(bx - x) < 3 && Math.abs(by - y) < 3)) continue;
-      blooms.push([x, y]);
-      if (r() < .6) { for (const [a, b] of [[0, -1], [-1, 0], [1, 0], [0, 1]]) set(x + a, y + b, 'f'); set(x, y, 'd'); set(x + sx, y - 1, 'h'); set(x - sx, y + 1, 'd'); }
-      else { set(x, y, 'f'); set(x + 1, y, 'f'); set(x, y + 1, 'd'); set(x + 1, y + 1, 'f'); set(sunLeft ? x : x + 1, y, 'h'); }
-    }
-    for (let y = 0; y < ROSE_H; y++) { // borda de luz nas folhas do lado do sol
-      const row = px[y], xs = row.map((k, x) => k === 'm' || k === 'e' ? x : -1).filter(x => x >= 0); if (!xs.length) continue;
-      const x = sunLeft ? xs[0] : xs[xs.length - 1]; if (row[x] === 'm' && r() < .7) row[x] = 'c';
+  const col = { e: '#4d4447', m: '#758787', c: '#9ab0a5', f: '#f79d8a', d: '#9a807b', h: '#dba79c', r: '#7c6669' };
+  const sunLeft = SUN_DIR.x < 0, out = [];
+  for (let v = 0; v < 6; v++) { // 0-1 normal, 2-3 mais baixa, 4-5 em botão; ímpar = espelhada
+    const kind = v >> 1, blank = '.'.repeat(ROSE_W);
+    const rows = kind === 2 ? [...ROSE_BUD, ...ROSE_ART.slice(10)] : kind === 1 ? [blank, blank, ...ROSE_ART.slice(0, 16), ROSE_ART[18]] : ROSE_ART;
+    const px = rows.map(row => v & 1 ? [...row].reverse() : [...row]);
+    for (const row of px) { // borda de luz do lado do sol
+      const xs = row.map((k, x) => k === 'm' || k === 'f' ? x : -1).filter(x => x >= 0); if (!xs.length) continue;
+      const x = sunLeft ? xs[0] : xs[xs.length - 1]; row[x] = row[x] === 'm' ? 'c' : 'h';
     }
     const c = document.createElement('canvas'); c.width = ROSE_W; c.height = ROSE_H; const g2 = c.getContext('2d');
     px.forEach((row, y) => row.forEach((k, x) => { if (k !== '.') { g2.fillStyle = col[k]; g2.fillRect(x, y, 1, 1); } }));
     const tex = new THREE.CanvasTexture(c); tex.magFilter = tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false;
     out.push({
-      mat: new THREE.MeshLambertMaterial({ map: tex, alphaTest: .5, side: THREE.DoubleSide }),
+      // emissiva: o tom do desenho a céu aberto, como o chão; o difuso fraco deixa a lanterna somar sem estourar a espiral
+      mat: new THREE.MeshLambertMaterial({ map: tex, color: 0x444444, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: .85, alphaTest: .5, side: THREE.DoubleSide }),
       shadow: new THREE.MeshLambertMaterial({ map: tex, alphaTest: .5, side: THREE.DoubleSide, colorWrite: false, depthWrite: false }),
     });
   }
@@ -942,36 +956,35 @@ function makeRoses(grp, ci, cj, boxes, r) {
     if (px < x0 + .5 || px > x0 + S - .5 || pz < z0 + .6 || pz > z0 + S - .5) return;
     if (Math.abs(px - (x0 + S / 2 + Math.sin((pz - z0) * .32 + ph) * 1.3)) < .7) return; // trilha sinuosa no meio
     if (boxes.some(b => px > b[0] - .3 && px < b[2] + .3 && pz > b[1] - .3 && pz < b[3] + .3)) return;
-    pts.push([px, pz, r() * ROSE_VARS.length | 0, (r() < .5 ? -1 : 1) * (.8 + r() * .35)]); // variante, espelho e tamanho
+    pts.push([px, pz, r() < .16 ? 4 + (r() * 2 | 0) : r() * 4 | 0]); // variante: poucas em botão
   };
-  // fileiras tortas e intercaladas: cada fileira ondula e começa meio passo deslocada da anterior, passo e
-  // posição sorteados, falhas e moitas mais densas por ruído, e de vez em quando uma roseira entre as fileiras
-  for (let z = z0 + 1, row = 0; z < z0 + S - .5; z += 1.05 + r() * .4, row++) {
-    const wav = r() * 6.3, amp = .12 + r() * .3;
-    for (let x = x0 + .5 + (row % 2) * .35 + r() * .2; x < x0 + S - .5; x += .45 + r() * .4) {
-      const px = x + (r() - .5) * .25, pz = z + Math.sin(x * .6 + wav) * amp + (r() - .5) * .45;
+  // grade da célula (C = 3): 2 fileiras por célula e 4 roseiras por fileira, o bastante para as folhas quase se tocarem
+  // e os 19 px de altura não cobrirem a fileira de trás. Fileiras intercaladas em meio passo, leve desvio e clareiras por ruído
+  const rowZ = C / 2, stepX = C / 4;
+  for (let z = z0 + rowZ, row = 0; z < z0 + S - .5; z += rowZ, row++) {
+    for (let x = x0 + stepX / 2 + (row % 2) * stepX / 2; x < x0 + S - .3; x += stepX) {
+      const px = x + (r() - .5) * .08, pz = z + (r() - .5) * .08;
       const dens = fbm(px * .3 + 31, pz * .3 + 7, 2, 5);
-      if ((dens < .32 && r() < .85) || r() < .07) continue; // clareiras e falhas
+      if ((dens < .32 && r() < .85) || r() < .05) continue; // clareiras e falhas
       add(px, pz);
-      if (dens > .6 && r() < .35) add(px + (r() - .5) * .5, pz + .45 + (r() - .5) * .25); // moita: uma a mais entre as fileiras
     }
   }
   const n = pts.length, count = ROSE_VARS.map((_, v) => pts.filter(p => p[2] === v).length);
   const vis = ROSE_VARS.map((V, v) => { const m = new THREE.InstancedMesh(ROSE_GEO, V.mat, Math.max(1, count[v])); m.count = count[v]; grp.add(m); return m; });
   const sh = ROSE_VARS.map((V, v) => { const m = new THREE.InstancedMesh(ROSE_GEO, V.shadow, Math.max(1, count[v])); m.count = count[v]; m.castShadow = true; grp.add(m); return m; });
-  const R0 = { n, meshes: [...vis, ...sh], vis, sh, x: new Float32Array(n), z: new Float32Array(n), v: new Uint8Array(n), slot: new Uint16Array(n), s: new Float32Array(n), tx: new Float32Array(n), tz: new Float32Array(n), x0, z0, x1: x0 + S, z1: z0 + S };
+  const R0 = { n, meshes: [...vis, ...sh], vis, sh, x: new Float32Array(n), z: new Float32Array(n), v: new Uint8Array(n), slot: new Uint16Array(n), tx: new Float32Array(n), tz: new Float32Array(n), x0, z0, x1: x0 + S, z1: z0 + S };
   const used = ROSE_VARS.map(() => 0);
-  pts.forEach(([x, z, v, s], i) => { R0.x[i] = x; R0.z[i] = z; R0.v[i] = v; R0.slot[i] = used[v]++; R0.s[i] = s; roseMatrix(R0, i); });
+  pts.forEach(([x, z, v], i) => { R0.x[i] = x; R0.z[i] = z; R0.v[i] = v; R0.slot[i] = used[v]++; roseMatrix(R0, i); });
   return R0;
 }
 const _rq = new THREE.Quaternion(), _ry = new THREE.Quaternion(), _rm = new THREE.Matrix4(), _rax = new THREE.Vector3(), _rpos = new THREE.Vector3(), _rsc = new THREE.Vector3(), _UP = new THREE.Vector3(0, 1, 0);
 const _rsun = new THREE.Quaternion().setFromAxisAngle(_UP, SUN_YAW);
 function roseMatrix(R0, i) {
-  const tx = R0.tx[i], tz = R0.tz[i], a = Math.hypot(tx, tz), v = R0.v[i], k = R0.slot[i], s = R0.s[i];
+  const tx = R0.tx[i], tz = R0.tz[i], a = Math.hypot(tx, tz), v = R0.v[i], k = R0.slot[i];
   if (a > 1e-4) { _rax.set(tz / a, 0, -tx / a); _rq.setFromAxisAngle(_rax, a); } else _rq.identity(); // inclina na direção (tx, tz)
-  _rpos.set(R0.x[i], 0, R0.z[i]); _rsc.set(s, Math.abs(s), 1);
+  _rpos.set(R0.x[i], 0, R0.z[i]); _rsc.set(1, 1, 1);
   _rm.compose(_rpos, _rq, _rsc); R0.vis[v].setMatrixAt(k, _rm);          // de frente para a câmera (que nunca gira)
-  _ry.copy(_rq).multiply(_rsun); _rm.compose(_rpos, _ry, _rsc); R0.sh[v].setMatrixAt(k, _rm); // recorte de frente para o sol
+  _rsc.y = .35; _ry.copy(_rq).multiply(_rsun); _rm.compose(_rpos, _ry, _rsc); R0.sh[v].setMatrixAt(k, _rm); // recorte de frente para o sol, achatado: a sombra inteira cobriria duas fileiras
 }
 function updateRoses(dt) {
   const agents = [player, ...entities]; if (cat) agents.push(cat);
@@ -1306,7 +1319,7 @@ function boxes(B, list) { for (const b of list) B.boxesRef.push(b); }
 const chunks = new Map(); let buildQueue = [];
 function buildChunk(ci, cj) {
   const C = L.C, H = L.H, tn = L.tons, grp = new THREE.Group(), lay = layout(ci, cj), kind = lay.kind;
-  const walls = [], hedges = [], props = [], lit = [], dead = [], glows = [], wires = [], boxesL = [], items = [], flick = [], crows = [], balloons = [];
+  const walls = [], hedges = [], props = [], lit = [], dead = [], glows = [], wires = [], boxesL = [], items = [], shards = [], flick = [], crows = [], balloons = [];
   const B = makeBuilder(props, boxesL, .5 * C, .5 * C); B.boxesRef = boxesL; B.machines = [];
   const wall = (x0, z0, x1, z1, y0 = 0, y1 = H, solid = true) => { walls.push(prep(boxGeo(x0, y0, z0, x1, y1, z1, true), tn.parede * (.96 + h3(Math.floor(x0 * 3), Math.floor(z0 * 3), 21) * .06), tn.topo)); if (solid) boxesL.push([x0, z0, x1, z1]); };
   const hedge = (x0, z0, x1, z1) => { // sebe: bloco com topo chanfrado
@@ -1386,12 +1399,21 @@ function buildChunk(ci, cj) {
   // itens: no centro das células, fora da mobília
   for (let a = 0; a < CH; a++) for (let b = 0; b < CH; b++) {
     const i = ci * CH + a, j = cj * CH + b; if (i === 0 && j === 0) continue;
-    const hi = h3(i, j, 15), key = `${levelN}:${i}:${j}`, type = hi < .022 ? 'agua' : hi < .036 ? 'pilha' : hi < .043 ? 'nota' : null;
+    const hi = h3(i, j, 15), key = `${levelN}:${i}:${j}`, type = hi < .011 ? 'agua' : hi < .018 ? 'pilha' : hi < .025 ? 'nota' : null;
     if (!type || collected.has(key)) continue;
     const ix = (i + .5) * C + (h3(i, j, 16) - .5) * C * .35, iz = (j + .5) * C + (h3(i, j, 17) - .5) * C * .35;
     if (boxesL.some(q => ix > q[0] - .35 && ix < q[2] + .35 && iz > q[1] - .35 && iz < q[3] + .35)) continue;
     const mesh = new THREE.Object3D(); mesh.position.set(ix, 0, iz); grp.add(mesh);
     items.push({ type, key, x: ix, z: iz, mesh, nota: (h3(i, j, 18) * T.notas.length) | 0, ph: hi * 50, vis: 0 });
+  }
+  // cacos escondidos: vidro, metal ou tábua solta. Só a lanterna os revela (updateShards)
+  for (let a = 0; a < CH; a++) for (let b = 0; b < CH; b++) {
+    const i = ci * CH + a, j = cj * CH + b; if ((i === 0 && j === 0) || h3(i, j, 19) >= .04) continue;
+    const x = (i + .5) * C + (h3(i, j, 20) - .5) * C * .6, z = (j + .5) * C + (h3(i, j, 21) - .5) * C * .6;
+    if (boxesL.some(q => x > q[0] - .3 && x < q[2] + .3 && z > q[1] - .3 && z < q[3] + .3)) continue;
+    const type = h3(i, j, 22) * SHARD_MATS.length | 0, mesh = new THREE.Mesh(SHARD_GEO, SHARD_DARK), glint = new THREE.Mesh(SHARD_GLINT, SHARD_MATS[type]);
+    mesh.add(glint); mesh.position.set(x, .05, z); mesh.scale.setScalar(1.6); mesh.rotation.y = h3(i, j, 23) * 6.3; mesh.visible = false; grp.add(mesh);
+    shards.push({ x, z, type, mesh, glint, t: 0 });
   }
   const S = CH * C;
   for (const [k, geo] of floorGeos(ci, cj)) { const fl = new THREE.Mesh(geo, FLOOR_MATS[k]); fl.receiveShadow = true; grp.add(fl); }
@@ -1406,7 +1428,7 @@ function buildChunk(ci, cj) {
   if (glows.length) { const gm = new THREE.Mesh(mergeGeometries(glows), glowMat); gm.renderOrder = 3; grp.add(gm); glows.forEach(q => q.dispose()); }
   if (kind === 'in') { const roof = new THREE.Mesh(new THREE.BoxGeometry(S, .3, S).translate(ci * S + S / 2, H + .15, cj * S + S / 2), roofMat); roof.castShadow = true; grp.add(roof); }
   scene.add(grp);
-  const ch = { ci, cj, kind, grp, boxes: boxesL, items, machines: B.machines, chairs: B.chairs, pools: B.pools, rooms, crows, balloons, roses, broto, flick, x0: ci * S, z0: cj * S, x1: (ci + 1) * S, z1: (cj + 1) * S };
+  const ch = { ci, cj, kind, grp, boxes: boxesL, items, shards, machines: B.machines, chairs: B.chairs, pools: B.pools, rooms, crows, balloons, roses, broto, flick, x0: ci * S, z0: cj * S, x1: (ci + 1) * S, z1: (cj + 1) * S };
   chunks.set(ci + ',' + cj, ch); return ch;
 }
 function disposeChunk(ch) {
@@ -1521,19 +1543,9 @@ P.Smoke_Seated = {
   Puff: { leg_L: 85, shin_L: 80, leg_R: 100, shin_R: 100, arm_L: 30, fore_L: 50, arm_R: 32, fore_R: 145, armZ_R: -8, spine: -8, head: -6 },
   Exhale: { leg_L: 85, shin_L: 80, leg_R: 100, shin_R: 100, arm_L: 30, fore_L: 50, arm_R: 25, fore_R: 60, spine: -10, head: -22 },
 };
-// andar pesado da palha: passo curto que quase não sai do chão, o quadril afunda forte no apoio (Down) e o tronco
-// tomba para o lado da perna que carrega o peso ('roll'), braços quase parados — massa demais para balançar
-P.Walk_Heavy = {
-  Contact_L: { leg_L: 18, shin_L: 6, leg_R: -14, shin_R: 14, arm_L: -6, arm_R: 6, armZ_L: 8, armZ_R: 8, spine: 6, roll: 5, hipsY: -.05, head: 4 },
-  Down_L: { leg_L: 12, shin_L: 20, leg_R: -9, shin_R: 26, arm_L: -4, arm_R: 4, armZ_L: 10, armZ_R: 6, spine: 10, roll: 9, hipsY: -.15, head: 9 },
-  Passing_R: { leg_L: 0, shin_L: 8, leg_R: 9, shin_R: 36, arm_L: 0, arm_R: 0, armZ_L: 9, armZ_R: 7, spine: 7, roll: 6, hipsY: -.07, head: 5 },
-  Up_L: { leg_L: -11, shin_L: 4, leg_R: 18, shin_R: 26, arm_L: 4, arm_R: -4, armZ_L: 8, armZ_R: 8, spine: 4, roll: 1, hipsY: .01, head: 2 },
-};
-for (const id of ['Walk_Neutral', 'Run_Neutral', 'Walk_Heavy']) for (const k of Object.keys(P[id])) if (k.endsWith('_L')) P[id][k.slice(0, -2) + '_R'] = mirrorPose(P[id][k]);
+for (const id of ['Walk_Neutral', 'Run_Neutral']) for (const k of Object.keys(P[id])) if (k.endsWith('_L')) P[id][k.slice(0, -2) + '_R'] = mirrorPose(P[id][k]);
 P.Walk_Neutral.Passing_L = mirrorPose(P.Walk_Neutral.Passing_R);
 P.Walk_Neutral.Up_R = mirrorPose(P.Walk_Neutral.Up_L);
-P.Walk_Heavy.Passing_L = mirrorPose(P.Walk_Heavy.Passing_R);
-P.Walk_Heavy.Up_R = mirrorPose(P.Walk_Heavy.Up_L);
 P.Run_Neutral.Flight_Peak_2 = mirrorPose(P.Run_Neutral.Flight_Peak);
 
 const CLIPS = {
@@ -1542,9 +1554,6 @@ const CLIPS = {
   Run_Neutral: { type: 'Loop', dur: .62, keys: ['Contact_L', 'Down_L', 'Push_Off_L', 'Flight_Peak', 'Contact_R', 'Down_R', 'Push_Off_R', 'Flight_Peak_2'], events: [{ at: 0, name: 'Step' }, { at: .5, name: 'Step2' }] },
   Hit_Front_Light: { type: 'OneShot', dur: .5, keys: ['Idle', 'Impact_Contact', 'Chest_Recoil', 'Small_Counterstep', 'Recovery'] },
   Collapse_Knees: { type: 'OneShot', dur: 1.4, keys: ['Standing', 'Pain_Grab', 'Leg_Buckle', 'Knee_Ground_Contact', 'Hunched_Hold'] },
-  // o apoio (Contact→Down) dura mais que o balanço: o peso demora a sair do pé
-  Walk_Heavy: { type: 'Loop', dur: 1.6, keys: ['Contact_L', 'Down_L', 'Passing_R', 'Up_L', 'Contact_R', 'Down_R', 'Passing_L', 'Up_R'],
-    times: [0, .1, .25, .38, .5, .6, .75, .88], events: [{ at: .1, name: 'Step' }, { at: .6, name: 'Step2' }] },
   Sit_Idle: { type: 'Loop', dur: 3.6, keys: ['Seated', 'Breath'] },
   Sit_Chair: { type: 'Loop', dur: 4.4, keys: ['Seated', 'Kick_L', 'Seated', 'Kick_R'] },
   Smoke_Seated: { type: 'Loop', dur: 7, keys: ['Rest', 'Rest', 'Lift', 'Puff', 'Exhale', 'Rest'], events: [{ at: .67, name: 'Exhale' }] },
@@ -1802,11 +1811,6 @@ function buildCreature(kind) {
   }
   return { root, hips, hipsBase: S.hips, k: 1, j, lamp: null, tip, kind };
 }
-/* palha — a criatura da pasta creature: um volume enorme em forma de ovo, todo de palha seca com fios duros
-   espetados para todo lado, um único buraco escuro no alto contornado por um anel de palha, pernas grossas e
-   curtas. ~2,2 m (20% mais alta que o andarilho). Anda pesada: clipe Walk_Heavy, com 'roll' balançando o tronco */
-const strawMat = new THREE.MeshLambertMaterial({ color: ctone(.05, 'N'), flatShading: true });   // palha preta
-const strawLight = new THREE.MeshLambertMaterial({ color: ctone(.13, 'N'), flatShading: true }); // fios um tom acima, para o contorno ler
 function strands(n, rx, ry, rz, cy, len0, len1, seed) { // fios saindo da superfície de um elipsoide, tortos e meio caídos
   const r = mulberry32(seed), geos = [], q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3();
   for (let k = 0; k < n; k++) {
@@ -1817,40 +1821,12 @@ function strands(n, rx, ry, rz, cy, len0, len1, seed) { // fios saindo da superf
   }
   const m = mergeGeometries(geos); geos.forEach(g => g.dispose()); return m;
 }
-let STRAW_GEO = null;
-function buildStraw() {
-  STRAW_GEO = STRAW_GEO || {
-    body: new THREE.IcosahedronGeometry(1, 1).scale(.28, .72, .25).translate(0, .32, 0), bodyF: strands(170, .28, .72, .25, .32, .15, .42, 71), // magro
-    head: new THREE.IcosahedronGeometry(1, 1).scale(.2, .3, .19).translate(0, .18, 0), headF: strands(70, .2, .3, .19, .18, .18, .55, 72),
-  };
-  const mesh = (gg, m, par) => { const o = new THREE.Mesh(gg, m); o.castShadow = true; par.add(o); return o; };
-  const box = (par, w, h, d, x, y, z, m = strawMat) => mesh(new THREE.BoxGeometry(w, h, d).translate(x, y, z), m, par);
-  const root = new THREE.Group(), hips = new THREE.Group(); hips.position.y = .85; root.add(hips);
-  const hunch = new THREE.Group(); hips.add(hunch);
-  const spine = new THREE.Group(); spine.position.y = .02; hunch.add(spine);
-  mesh(STRAW_GEO.body, strawMat, spine); mesh(STRAW_GEO.bodyF, strawLight, spine);
-  const head = new THREE.Group(); head.position.y = .9; spine.add(head);
-  mesh(STRAW_GEO.head, strawMat, head); mesh(STRAW_GEO.headF, strawLight, head);
-  const hole = new THREE.Mesh(new THREE.CircleGeometry(.065, 10), new THREE.MeshBasicMaterial({ color: tone(0) })); hole.position.set(0, .24, .195); head.add(hole); // o buraco
-  const ring = mesh(new THREE.TorusGeometry(.085, .02, 5, 12), strawLight, head); ring.position.set(0, .24, .19);
-  const j = { spine: { o: spine, axis: 'x', sign: 1 }, twist: { o: spine, axis: 'y', sign: 1 }, head: { o: head, axis: 'x', sign: 1 }, roll: { o: hunch, axis: 'z', sign: 1 } };
-  for (const [s, side] of [[1, 'L'], [-1, 'R']]) {
-    const arm = new THREE.Group(); arm.position.set(s * .27, .62, 0); spine.add(arm); box(arm, .08, .4, .08, 0, -.2, 0);
-    const fore = new THREE.Group(); fore.position.y = -.4; arm.add(fore); box(fore, .07, .38, .07, 0, -.19, 0);
-    const leg = new THREE.Group(); leg.position.set(s * .1, -.04, 0); hips.add(leg); box(leg, .12, .42, .12, 0, -.21, 0);
-    const shin = new THREE.Group(); shin.position.y = -.42; leg.add(shin); box(shin, .1, .4, .1, 0, -.2, 0);
-    box(shin, .1, .05, .22, 0, -.39, .05); // pé, também preto
-    Object.assign(j, { ['arm_' + side]: { o: arm, axis: 'x', sign: -1 }, ['armZ_' + side]: { o: arm, axis: 'z', sign: s }, ['fore_' + side]: { o: fore, axis: 'x', sign: -1 },
-      ['leg_' + side]: { o: leg, axis: 'x', sign: -1 }, ['shin_' + side]: { o: shin, axis: 'x', sign: 1 } });
-  }
-  return { root, hips, hipsBase: .85, k: 1, j, lamp: null, tip: null, kind: 'palha' };
-}
 
 /* =====================================================================
    5. JOGO: andarilho, sanidade, lanterna, noclip, o Inquilino, itens, saída
    ===================================================================== */
 const prig = buildHumanoid(.16); scene.add(prig.root);
-const player = { x: 0, z: 0, face: 0, anim: new Animator(prig), san: 100, bat: 100, stam: 100, agua: 1, cafe: 0, sip: 0, sipT: 0, lanterna: true, hurt: 0, noclipT: 0, stamLock: 0, dead: false, seat: null, ignored: false, sink: 0, batK: 1 };
+const player = { x: 0, z: 0, face: 0, anim: new Animator(prig), san: 100, bat: 100, stam: 100, agua: 1, cafe: 0, sip: 0, sipT: 0, lanterna: true, hurt: 0, noclipT: 0, stamLock: 0, dead: false, seat: null, ignored: false, sink: 0, batK: 1, holding: false, holdT: 0, holdMax: 8, holdCD: 0, puff: 0, breathT: 0, copo: false };
 player.anim.play('Idle_Neutral');
 player.anim.onEvent = name => { if (name.startsWith('Step')) step(player.anim.cur === 'Run_Neutral' ? .3 : .18); };
 const selfLight = new THREE.PointLight(0xffffff, 7.5, 4.2, 2); scene.add(selfLight);
@@ -1860,6 +1836,10 @@ scene.add(spot, spot.target);
 
 const entities = [];
 let cat = null;
+// som no mundo: ondas visíveis, cafeteiras pingando, o telefone que toca sozinho e o copo no ar
+const WAVE_GEO = new THREE.BufferGeometry().setFromPoints(Array.from({ length: 48 }, (_, k) => new THREE.Vector3(Math.cos(k / 48 * 6.2832), 0, Math.sin(k / 48 * 6.2832))));
+const waves = [], drips = [];
+let phone = null, phoneT = 90, thrown = null, breathWaveT = 0;
 const stats = { salas: 0, niveis: 0, notas: new Set(), tempo: 0, afastados: 0 };
 let visited = new Map(), exitSeen = false, spawnT = 25, game = 'title', flash = 0, shake = 0, glitch = 0, fadeT = 0, endT = 0;
 let banner = null, msg = null, noteOpen = -1, levelT = 0, placeName = '';
@@ -1868,7 +1848,8 @@ const ROOM_NAMES = { escritorio: 'sala dos terminais', maquinas: 'sala das fitas
 function startLevel(n) {
   for (const ch of [...chunks.values()]) disposeChunk(ch);
   for (const e of entities) scene.remove(e.rig.root); entities.length = 0;
-  for (const q of dissolving) scene.remove(q.e.rig.root); dissolving.length = 0; if (dust) dust.clear();
+  for (const w of waves) { scene.remove(w.m); w.m.material.dispose(); } waves.length = 0; drips.length = 0;
+  if (thrown) scene.remove(thrown.m); thrown = null; phone = null; phoneT = R(60, 120);
   for (const f of burning.values()) scene.remove(f.grp); burning.clear(); altered.clear(); pendingRoom.length = 0; curRoom = null; roomFlick = null;
   fireSmoke.clear(); cigSmoke.clear();
   levelN = n; L = levelDef(n); SEED = (T.seed * 7919 + n * 104729) | 0;
@@ -1876,8 +1857,8 @@ function startLevel(n) {
   EXIT.i = Math.round(Math.cos(ang) * dist / L.C); EXIT.j = Math.round(Math.sin(ang) * dist / L.C);
   clearMemo(); lastChunk = '';
   CUT.uListra.value = L.listra;
-  player.x = player.z = .5 * L.C; player.face = Math.PI; player.noclipT = 0; player.seat = null; player.ignored = false;
-  visited = new Map(); exitSeen = false; spawnT = Math.max(5, 9 - n * 2); restT = 0; levelT = 0; placeName = '';
+  player.x = player.z = .5 * L.C; player.face = Math.PI; player.noclipT = 0; player.seat = null; player.ignored = false; player.holding = false; player.holdT = 0;
+  visited = new Map(); exitSeen = false; spawnT = Math.max(5, 9 - n * 2); levelT = 0; placeName = '';
   buildExit(); updateChunks(player.x, player.z, true); placeCat(); placeWoman(); removeCorner();
   showBanner(L.nome, L.sub);
 }
@@ -1922,20 +1903,34 @@ function updatePlayer(dt, t) {
   if (stick.on) { ix += stick.x; iz += stick.z; } // joystick virtual (celular)
   let il = Math.hypot(ix, iz); if (il > 0) { ix /= il; iz /= il; }
   if (player.seat) { if (il > 0 || keys.has('KeyE')) { keys.delete('KeyE'); standUp(); } il = ix = iz = 0; } // sentado: andar ou [E] levanta
-  const wantRun = (keys.has('ShiftLeft') || keys.has('ShiftRight')) && il > 0 && player.stam > 0 && player.stamLock <= 0;
+  // prender o ar (Espaço): a criatura não ouve a respiração, mas o passo fica lento, depois do limite dói e, ao soltar, o
+  // andarilho arfa: quanto mais tempo preso, mais longe o som chega. Ofegante, o ar dura menos e a respiração alcança mais longe
+  player.puff = Math.max(0, player.puff - dt); player.holdCD = Math.max(0, player.holdCD - dt);
+  if (keys.has('Space') && (player.holding || player.holdCD <= 0)) {
+    if (!player.holding) { player.holding = true; player.holdT = 0; player.holdMax = panting() ? 5 : 8; }
+    player.holdT += dt;
+    if (player.holdT > player.holdMax) { player.san -= 5 * dt; if (!msg) showMsg('sem ar', .6); }
+  } else if (player.holding) {
+    player.holding = false; player.holdCD = 1.5 + player.holdT * .25;
+    if (player.holdT >= 3) { makeNoise(player.x, player.z, 6 + 8 * clamp((player.holdT - 3) / 5, 0, 1)); noiseBurst(.8, 650, .8, .25, 'lowpass'); }
+    else noiseBurst(.3, 500, .7, .05, 'lowpass');
+  }
+  player.breathT -= dt;
+  if (!player.holding && player.breathT <= 0) { const p = panting(); player.breathT = p ? 1.1 : 3.2; noiseBurst(p ? .5 : .7, 500, .7, p ? .07 : .025, 'lowpass'); }
+  const wantRun = (keys.has('ShiftLeft') || keys.has('ShiftRight')) && il > 0 && player.stam > 0 && player.stamLock <= 0 && !player.holding;
   // dentro da piscina: afunda até a cintura e anda devagar
   let inPool = false;
   for (const ch of chunks.values()) for (const p of ch.pools) if (player.x > p.x0 && player.x < p.x1 && player.z > p.z0 && player.z < p.z1) inPool = true;
   player.sink += ((inPool ? .7 : 0) - player.sink) * Math.min(1, dt * 5);
-  const sp = (player.hurt > 0 ? 1.6 : wantRun ? 5.2 : 3) * (player.cafe > 0 ? 1.2 : 1) * (inPool ? .55 : 1); // com café na mão, 20% mais rápido
-  if (wantRun) { player.stam -= dt * 20; if (player.stam <= 0) { player.stam = 0; player.stamLock = 2; showMsg('sem fôlego'); } }
+  const sp = (player.hurt > 0 ? 1.6 : wantRun ? 5.2 : 3) * (player.cafe > 0 ? 1.2 : 1) * (inPool ? .55 : 1) * (player.holding ? .55 : 1); // com café na mão, 20% mais rápido
+  if (wantRun) { player.puff = 4; player.stam -= dt * 20; if (player.stam <= 0) { player.stam = 0; player.stamLock = 2; showMsg('sem fôlego'); } }
   else { player.stamLock -= dt; player.stam = Math.min(100, player.stam + dt * (player.seat ? 30 : il > 0 ? 9 : 16)); }
   // café: com o copo na mão o andarilho vai tomando aos goles enquanto o fôlego não está cheio (correndo, goles maiores)
   if (player.cafe > 0 && player.stam < 99) {
     const s = Math.min(player.cafe, dt * (wantRun ? 6 : 2.5));
     player.cafe -= s; player.stam = Math.min(100, player.stam + s * 4);
     player.sipT -= dt; if (player.sipT <= 0) { player.sipT = 2.2; player.sip = .5; noiseBurst(.2, 650, 1.4, .07, 'lowpass'); }
-    if (player.cafe <= 0) { player.cafe = 0; showMsg('o café acabou'); }
+    if (player.cafe <= 0) { player.cafe = 0; player.copo = true; showMsg('o café acabou'); }
   }
   player.sip = Math.max(0, player.sip - dt);
   player.hurt = Math.max(0, player.hurt - dt);
@@ -1969,12 +1964,13 @@ function updatePlayer(dt, t) {
   if (player.lanterna && player.bat <= 0 && spot.intensity > 0) showMsg('a pilha acabou');
   spot.intensity = on ? 30 * (player.bat < 15 ? (h3(Math.floor(t * 15), 1, 9) < .3 ? .25 : 1) : 1) : 0;
   prig.lamp.material.color.setScalar(on ? 1 : .3);
+  updateShards(on, il > 0, wantRun, t);
 
   // sanidade: escuro corrói, luz segura, o Inquilino perto corrói muito
   lightT -= dt; if (lightT <= 0) { lightT = .25; lightCache = lightLevel(player.x, player.z); }
   const dark = 1 - sstep(.25, .7, lightCache);
   let drain = .1 + dark * (on ? .35 : .8);
-  for (const e of entities) { const d = Math.hypot(e.x - player.x, e.z - player.z); if (d < 10) drain += (10 - d) * .18 * (e.calm ? .25 : 1); }
+  for (const e of entities) { const d = Math.hypot(e.x - player.x, e.z - player.z); if (d < 10) drain += (10 - d) * .18; }
   player.san -= drain * dt;
   if (player.san <= 0) die();
 
@@ -1994,12 +1990,17 @@ function updatePlayer(dt, t) {
     else if (it.type === 'pilha') { player.bat = Math.min(100, player.bat + 45); showMsg('pilha nova'); blip(300, 600, .12, .12); }
     else { noteOpen = it.nota; stats.notas.add(it.nota); game = 'note'; blip(200, 160, .3, .1, 'triangle'); }
   }
-  // máquina de café: cada uma serve um copo cheio
+  // telefone tocando: [E] atende e o som para
+  if (phone && Math.hypot(phone.x - player.x, phone.z - player.z) < 1.1) {
+    if (!msg || msg.s !== '[E] atender') showMsg('[E] atender', .3);
+    if (keys.has('KeyE')) { keys.delete('KeyE'); phone = null; phoneT = R(60, 120); showMsg('o telefone calou'); blip(300, 200, .08, .08, 'square'); }
+  }
+  // máquina de café: cada uma serve um copo cheio, e fica pingando alto por uns segundos
   let mq = null;
   for (const ch of chunks.values()) for (const m of ch.machines) if (!collected.has(m.key) && Math.hypot(m.x - player.x, m.z - player.z) < 1.1) mq = m;
   if (mq) {
     if (!msg || msg.s !== '[E] pegar café') showMsg('[E] pegar café', .3);
-    if (keys.has('KeyE')) { keys.delete('KeyE'); collected.add(mq.key); player.cafe = 100; player.sipT = .8; showMsg('café quente'); noiseBurst(.6, 900, .8, .12); blip(420, 620, .15, .08, 'triangle'); }
+    if (keys.has('KeyE')) { keys.delete('KeyE'); collected.add(mq.key); player.cafe = 100; player.copo = false; player.sipT = .8; drips.push({ x: mq.x, z: mq.z, t: 6, next: 0 }); showMsg('café quente'); noiseBurst(.6, 900, .8, .12); blip(420, 620, .15, .08, 'triangle'); }
   }
   const ex = exitGrp.position.x, ez = exitGrp.position.z, de = Math.hypot(ex - player.x, ez - player.z);
   if (de < 14) exitSeen = true;
@@ -2010,7 +2011,7 @@ function updatePlayer(dt, t) {
     if (seat) { if (!msg || msg.s !== '[E] sentar') showMsg('[E] sentar', .3); if (keys.has('KeyE')) { keys.delete('KeyE'); sitDown(seat); } }
   }
 }
-// sentar: o fôlego volta rápido e, 30% das vezes, as criaturas não enxergam quem está sentado (sorteado ao sentar)
+// sentar: o fôlego volta rápido e, 30% das vezes, as criaturas não ouvem quem está sentado (sorteado ao sentar)
 function sitDown(c) {
   player.seat = c; c.taken = player; player.x = c.x; player.z = c.z; player.face = Math.atan2(0, -c.face);
   player.ignored = Math.random() < .3; blip(180, 120, .12, .06, 'triangle');
@@ -2057,7 +2058,108 @@ function bfsPath(si, sj, ti, tj) {
   }
   return null;
 }
-// ahead: nasce lá adiante, numa sala na direção em que o andarilho segue, e fica rondando por lá até vê-lo
+/* --- o som: a criatura é cega e já se acostumou ao ambiente; só reage ao que foge do normal (máquinas, cacos, telefone,
+   copo, gato) e à respiração, na mesma sala ou na vizinha. O som anda pelo caminho aberto: parede segura, porta deixa passar.
+   Na sala das fitas o zumbido abafa tudo: ninguém ouve a respiração e os outros ruídos chegam à metade --- */
+const panting = () => player.puff > 0 || player.stam < 40;
+const inFitas = (x, z) => { const rm = roomAt(Math.floor(x / L.C), Math.floor(z / L.C)); return rm && rm.type === 'maquinas'; };
+function addWave(x, z, rad) {
+  if (waves.length >= 8) { const w = waves.shift(); scene.remove(w.m); w.m.material.dispose(); }
+  const m = new THREE.LineLoop(WAVE_GEO, new THREE.LineBasicMaterial({ color: tone(1.1), transparent: true }));
+  m.position.set(x, .04, z); m.scale.setScalar(.01); scene.add(m); waves.push({ m, rad, t: 0, dur: .6 + rad * .06 });
+}
+function hear(e, x, z) {
+  if (e.state === 'foge') return;
+  e.noiseX = x; e.noiseZ = z; e.repath = 0; e.path = []; e.wander = null;
+  if (e.state !== 'investiga' && e.state !== 'escuta') { e.state = 'escuta'; e.stateT = .6; }
+}
+function makeNoise(x, z, rad) {
+  if (inFitas(x, z)) rad *= .5;
+  addWave(x, z, rad);
+  const C = L.C, i = Math.floor(x / C), j = Math.floor(z / C);
+  for (const e of entities) {
+    if (Math.hypot(e.x - x, e.z - z) > rad) continue;
+    const p = bfsPath(Math.floor(e.x / C), Math.floor(e.z / C), i, j);
+    if (p && p.length * C <= rad) hear(e, x, z);
+  }
+}
+// a respiração alcança a mesma sala e a vizinha (ofegante, uma a mais); nos jardins, sem salas, 3 células (ofegante, 5)
+function breathHeard(e) {
+  if (player.holding || (player.seat && player.ignored) || inFitas(player.x, player.z)) return false;
+  const C = L.C, ei = Math.floor(e.x / C), ej = Math.floor(e.z / C);
+  const p = bfsPath(ei, ej, Math.floor(player.x / C), Math.floor(player.z / C)); if (!p) return false;
+  const puff = panting(), seen = new Set(); let out = 0;
+  for (const [i, j] of [[ei, ej], ...p]) { const rm = roomAt(i, j); if (rm) seen.add(rm); else out++; }
+  return seen.size <= (puff ? 3 : 2) && out <= (puff ? 5 : 3);
+}
+const SHARD_SFX = [
+  k => { noiseBurst(.18, 4200, 3, .16 * k); blip(3200, 2100, .07, .03 * k, 'triangle'); },             // vidro
+  k => { noiseBurst(.1, 1800, 5, .1 * k); blip(880, 620, .25, .05 * k, 'sawtooth'); },                 // metal
+  k => { blip(240, 150, .32, .09 * k, 'triangle'); blip(310, 190, .28, .03 * k, 'sawtooth'); },        // tábua
+];
+function updateShards(on, moving, running, t) {
+  for (const ch of chunks.values()) for (const s of ch.shards) {
+    const dx = s.x - player.x, dz = s.z - player.z, d = Math.hypot(dx, dz);
+    s.mesh.visible = on && d < 11 && (dx * aimX + dz * aimZ) / Math.max(d, 1e-3) > Math.cos(.46) && !segBlocked(player.x, player.z, s.x, s.z);
+    s.glint.visible = Math.sin(t * 7 + s.x * 5) > -.3;
+    if (d > .45 || !moving || player.holding || t < s.t) continue; // com o ar preso o passo é lento e cuidadoso: não range
+    s.t = t + 2; makeNoise(s.x, s.z, running ? 14 : 8); SHARD_SFX[s.type](running ? 1.3 : 1);
+  }
+}
+function throwCup() {
+  if (!player.copo || thrown) return;
+  let dist = 7; while (dist > .5 && segBlocked(player.x, player.z, player.x + aimX * dist, player.z + aimZ * dist)) dist -= .5;
+  const m = new THREE.Mesh(prig.cup.geometry, prig.cup.material); scene.add(m);
+  thrown = { m, x0: player.x, z0: player.z, x1: player.x + aimX * dist, z1: player.z + aimZ * dist, t: 0, dur: .25 + dist * .07 };
+  player.copo = false; blip(500, 300, .1, .04, 'triangle');
+}
+function startPhone() {
+  const C = L.C, pi = Math.floor(player.x / C), pj = Math.floor(player.z / C);
+  for (let k = 0; k < 30; k++) {
+    const a = R(0, 6.283), d = R(10, 25), i = Math.floor((player.x + Math.cos(a) * d) / C), j = Math.floor((player.z + Math.sin(a) * d) / C);
+    if (!roomAt(i, j)) continue;
+    const x = (i + .5) * C, z = (j + .5) * C, p = bfsPath(i, j, pi, pj);
+    if (!p || p.length * C < 10 || p.length * C > 25 || !isFree(x, z, .3)) continue;
+    phone = { x, z, t: 8, ring: 0, noiseT: 0, vis: 0 }; return;
+  }
+  phoneT = 10; // não achou sala: tenta de novo logo
+}
+function updateNoises(dt) {
+  for (let k = drips.length - 1; k >= 0; k--) {
+    const q = drips[k]; q.t -= dt; q.next -= dt;
+    if (q.next <= 0) { q.next = 1.5; makeNoise(q.x, q.z, 16); noiseBurst(.25, 900, 1.2, .1 * clamp(1 - Math.hypot(q.x - player.x, q.z - player.z) / 30, 0, 1)); }
+    if (q.t <= 0) drips.splice(k, 1);
+  }
+  if (phone) {
+    phone.t -= dt; phone.ring -= dt; phone.noiseT -= dt;
+    if (phone.noiseT <= 0) { phone.noiseT = 3; makeNoise(phone.x, phone.z, 20); }
+    const v = clamp(1 - Math.hypot(phone.x - player.x, phone.z - player.z) / 30, 0, 1) * .05;
+    if (phone.ring <= 0 && v > .001) { phone.ring = 1.3; blip(1320, 1300, .3, v); setTimeout(() => blip(1040, 1030, .3, v), 340); }
+    if (phone.t <= 0) { phone = null; phoneT = R(60, 120); }
+  } else if ((phoneT -= dt) <= 0) startPhone();
+  if (thrown) {
+    const q = thrown; q.t += dt; const u = Math.min(1, q.t / q.dur);
+    q.m.position.set(q.x0 + (q.x1 - q.x0) * u, 1 - u * .95 + Math.sin(u * Math.PI) * .9, q.z0 + (q.z1 - q.z0) * u); q.m.rotation.x += dt * 14;
+    if (u >= 1) { scene.remove(q.m); thrown = null; makeNoise(q.x1, q.z1, 12); noiseBurst(.12, 2400, 2, .16); blip(1600, 900, .08, .05, 'triangle'); }
+  }
+  breathWaveT -= dt;
+  for (let k = waves.length - 1; k >= 0; k--) {
+    const w = waves[k], u = (w.t += dt) / w.dur;
+    if (u >= 1) { scene.remove(w.m); w.m.material.dispose(); waves.splice(k, 1); continue; }
+    w.m.scale.setScalar(Math.max(.01, w.rad * (1 - (1 - u) * (1 - u)))); w.m.material.opacity = 1 - u;
+  }
+}
+// a luz não cega quem já é cego, mas queima: ela se encolhe, foge para longe e depois volta a rondar
+function scare(e) {
+  const C = L.C; e.state = 'foge'; e.stateT = 6; e.stun = 0; e.path = []; e.wander = null;
+  const away = Math.atan2(e.z - player.z, e.x - player.x), d0 = Math.hypot(e.x - player.x, e.z - player.z);
+  for (let k = 0; k < 20; k++) { // para longe do andarilho, sem caminho que passe por ele
+    const a = away + R(-1.2, 1.2), d = R(12, 20), p = bfsPath(Math.floor(e.x / C), Math.floor(e.z / C), Math.floor((e.x + Math.cos(a) * d) / C), Math.floor((e.z + Math.sin(a) * d) / C));
+    if (p && p.length * C >= 12 && p.every(([i, j]) => Math.hypot((i + .5) * C - player.x, (j + .5) * C - player.z) >= Math.min(d0, 2.5))) { e.path = p; break; }
+  }
+  stats.afastados++; showMsg(`${pron(e)} fugiu da luz`); flash = .25; sfxGlitch(.5);
+}
+// ahead: nasce lá adiante, numa sala na direção em que o andarilho segue, e fica rondando por lá até ouvi-lo
 function spawnEntity(forceKind = null, ahead = false) {
   const C = L.C, fa = Math.atan2(Math.sin(player.face), Math.cos(player.face));
   for (let tries = 0; tries < 30; tries++) {
@@ -2068,176 +2170,82 @@ function spawnEntity(forceKind = null, ahead = false) {
     if (!bfsPath(i, j, Math.floor(player.x / C), Math.floor(player.z / C))) continue;
     // desde o início a criatura que surge é a aranha
     const kind = forceKind || 'aranha';
-    const rig = kind === 'aranha' ? buildSpider() : kind === 'palha' ? buildStraw() : buildCreature(kind); scene.add(rig.root);
+    const rig = kind === 'aranha' ? buildSpider() : buildCreature(kind); scene.add(rig.root);
     const e = { rig, kind, anim: new Animator(rig), x: (i + .5) * C, z: (j + .5) * C, face: 0, path: [], repath: 0, stun: 0, lit: false, hunt: false,
-      calm: kind !== 'aranha' && Math.random() < .1, seat: null, sitting: false, seatT: 0, walkPh: 0, idle: ahead }; // 10%: não ataca, só procura uma cadeira para sentar
+      state: 'ronda', stateT: 0, hearT: R(0, .5), noiseX: 0, noiseZ: 0 };
     if (kind === 'lobo') blip(110, 55, 1.2, .12, 'sawtooth'); // uivo grave ao longe
     if (kind === 'aranha') noiseBurst(1.2, 5200, 4, .08);   // patas raspando
-    if (kind === 'palha') e.anim.onEvent = name => { // cada passo é um baque grave (com palha estalando); perto, o chão treme
-      if (!name.startsWith('Step')) return;
-      const d = Math.hypot(e.x - player.x, e.z - player.z), k = clamp(1 - d / 22, 0, 1); if (k <= 0) return;
-      noiseBurst(.35, 80, .9, .3 * k, 'lowpass'); blip(70, 34, .3, .12 * k, 'sine'); noiseBurst(.12, 3200, 1.5, .04 * k);
-      if (d < 8) shake = Math.max(shake, .14 * (1 - d / 8));
-    };
-    if (kind === 'palha') { e.igniteT = Math.random() < .1 ? R(4, 25) : -1; e.burnT = 0; } // 10%: vai pegar fogo daqui a pouco
     e.anim.play('Walk_Neutral'); entities.push(e); return true;
   }
   return false;
 }
-let restT = 0; // depois de espantar uma com a lanterna: 25 s sem nenhuma nova surgir
 const pron = e => e.kind === 'aranha' ? 'ela' : 'ele';
-// a aranha desintegrada pela lanterna: encolhida, os pedaços somem um a um (das pontas das patas para o corpo),
-// cada um virando poeira clara que sobe devagar
-const dissolving = [], _dv = new THREE.Vector3();
-let dust = null; // criada no primeiro uso: a classe Smoke vem mais abaixo
-function dissolve(e) {
-  dust = dust || new Smoke(320, .8, .3);
-  const parts = [], body = [];
-  e.rig.root.traverse(o => { if (o.isMesh) (o.parent === e.rig.root ? parts : body).push(o); });
-  parts.sort((a, b) => a.position.y - b.position.y); // pernas: mais baixo (pontas) primeiro
-  dissolving.push({ e, t: 0, done: 0, parts: [...parts, ...body] });
-}
-function updateDissolve(dt, t) {
-  for (let k = dissolving.length - 1; k >= 0; k--) {
-    const q = dissolving[k], e = q.e; q.t += dt;
-    updateSpider(e.rig, e.x + (Math.random() - .5) * .1, e.z, e.face, dt, 1);
-    const want = Math.floor(q.parts.length * clamp(q.t / .9, 0, 1));
-    while (q.done < want) {
-      const m = q.parts[q.done++]; m.getWorldPosition(_dv); m.visible = false;
-      for (let n = 0; n < (m.parent === e.rig.root ? 1 : 6); n++) dust.emit(_dv.x + R(-.08, .08), _dv.y, _dv.z + R(-.08, .08), R(.12, .28), R(-.3, .3), R(-.3, .3));
-    }
-    if (q.t > 1) { scene.remove(e.rig.root); dissolving.splice(k, 1); }
-  }
-  if (dust) dust.update(dt, t);
-}
-function vanish(e, why) {
-  if (why === 'luz' && e.kind === 'aranha') dissolve(e); else scene.remove(e.rig.root);
+function vanish(e) {
+  scene.remove(e.rig.root);
   entities.splice(entities.indexOf(e), 1);
-  if (e.seat) e.seat.taken = null;
-  // espantada (luz) ou depois de atravessar o andarilho, demora a voltar outra: o susto rende um respiro
-  spawnT = Math.max(spawnT, why === 'luz' ? (restT = 25) : why === 'toque' ? R(18, 28) - Math.min(6, levelN) : R(5, 9));
-  if (why === 'luz') { stats.afastados++; showMsg(`${pron(e)} se desfez na luz`); flash = .25; }
-  if (why === 'fogo') { if (Math.hypot(e.x - player.x, e.z - player.z) < 20) showMsg(`${pron(e)} virou cinza`); fireSmoke.emit(e.x, .6, e.z, 2.2); return; }
+  spawnT = Math.max(spawnT, R(18, 28) - Math.min(6, levelN)); // depois de atravessar o andarilho, demora a voltar outra: o susto rende um respiro
   sfxGlitch(.5);
 }
-// --- o homem de palha em chamas: queima 1 minuto — o fogo cresce, a palha escurece, no fim ele encolhe e afunda;
-//     consumido, some e outro homem de palha surge em outro lugar ---
-const BURN_TIME = 60, strawFireLight = new THREE.PointLight(0xffffff, 0, 9, 1.6); scene.add(strawFireLight);
-const _hp = new THREE.Vector3();
-function igniteStraw(e) {
-  e.burnT = BURN_TIME; e.flames = []; e.charMats = []; e.smokeT = 0;
-  e.rig.root.traverse(o => { if (o.isMesh && (o.material === strawMat || o.material === strawLight)) { o.material = o.material.clone(); e.charMats.push([o.material, o.material.color.clone()]); } });
-  const spine = e.rig.j.spine.o, head = e.rig.j.head.o;
-  for (let k = 0; k < 14; k++) { // chamas espalhadas pela metade de cima do corpo e pela cabeça
-    const onHead = k >= 10, u = Math.random() * .8 + .1, a = Math.random() * 6.283, s = Math.sqrt(1 - u * u);
-    const m = new THREE.Mesh(FLAME_GEO, flameMats[k % 2]);
-    if (onHead) m.position.set(s * Math.cos(a) * .22, .18 + u * .3, s * Math.sin(a) * .2); else m.position.set(s * Math.cos(a) * .42, .32 + u * .66, s * Math.sin(a) * .36);
-    m.userData = { s: .9 + Math.random() * .8, ph: Math.random() * 9 }; (onHead ? head : spine).add(m); e.flames.push(m);
-  }
-  if (Math.hypot(e.x - player.x, e.z - player.z) < 18) showMsg(`${pron(e)} pegou fogo`);
-  noiseBurst(1.2, 400, .6, .2, 'lowpass');
-}
-// devolve true se ele acabou de ser consumido (já saiu da lista)
-function updateBurning(e, dt, t, d) {
-  if (e.igniteT > 0 && (e.igniteT -= dt) <= 0) igniteStraw(e);
-  if (e.burnT <= 0) return false;
-  e.burnT -= dt;
-  const u = 1 - Math.max(0, e.burnT) / BURN_TIME, grow = Math.min(1, (BURN_TIME - e.burnT) / 4);
-  for (const m of e.flames) { const q = m.userData, w = .7 + .5 * Math.sin(t * 11 + q.ph) * Math.sin(t * 7.3 + q.ph * 2); m.scale.set(q.s * (.8 + .2 * w) * grow, q.s * (.6 + .7 * w) * grow, q.s * (.8 + .2 * w) * grow); m.rotation.y = t * 2 + q.ph; }
-  for (const [mat, base] of e.charMats) mat.color.copy(base).multiplyScalar(1 - .88 * u); // a palha vai virando carvão
-  const k = u > .75 ? 1 - (u - .75) / .25 * .65 : 1; e.rig.root.scale.setScalar(k);     // no último quarto encolhe
-  e.smokeT -= dt; if (e.smokeT <= 0) { e.smokeT = .14; e.rig.j.head.o.getWorldPosition(_hp); fireSmoke.emit(_hp.x + R(-.2, .2), _hp.y + .3, _hp.z + R(-.2, .2), R(.7, 1.2) * grow); }
-  if (d < 22 && (strawFireLight.intensity === 0 || d < strawFireLight.userData.d)) { strawFireLight.userData.d = d; strawFireLight.position.set(e.x, 1.8 * k, e.z); strawFireLight.intensity = 26 * grow * (.75 + .25 * Math.sin(t * 17)); }
-  if (d < 10 && Math.random() < dt * 9) noiseBurst(R(.03, .08), R(1500, 4000), 2, .05 * (1 - d / 10)); // estalos
-  if (e.burnT <= 0) { vanish(e, 'fogo'); spawnEntity('palha'); return true; }
-  return false;
-}
 function updateEntities(dt, t) {
-  updateDissolve(dt, t);
-  spawnT -= dt; restT -= dt;
+  spawnT -= dt;
   // se não achou lugar com caminho até o jogador, tenta de novo logo em vez de esperar o ciclo inteiro
-  if (spawnT <= 0 && restT <= 0 && entities.length < L.ent) spawnT = spawnEntity(null, Math.random() < .5) ? R(5, 9) : 1; // metade nasce lá adiante
+  if (spawnT <= 0 && entities.length < L.ent) spawnT = spawnEntity(null, Math.random() < .5) ? R(5, 9) : 1; // metade nasce lá adiante
   const on = player.lanterna && player.bat > 0, C = L.C;
-  strawFireLight.intensity = 0;
   for (const e of [...entities]) {
     const dx = player.x - e.x, dz = player.z - e.z, d = Math.hypot(dx, dz);
-    if (d > 45) { scene.remove(e.rig.root); entities.splice(entities.indexOf(e), 1); if (e.seat) e.seat.taken = null; spawnT = Math.min(spawnT, R(3, 6)); continue; } // ficou para trás: outra surge logo
-    if (e.kind === 'palha' && updateBurning(e, dt, t, d)) continue;
-    const los = d < 16 && !segBlocked(e.x, e.z, player.x, player.z);
+    if (d > 45) { scene.remove(e.rig.root); entities.splice(entities.indexOf(e), 1); spawnT = Math.min(spawnT, R(3, 6)); continue; } // ficou para trás: outra surge logo
     const ignore = player.seat && player.ignored; // quem está sentado (30% das vezes) some para ela
-    e.hunt = !e.calm && !ignore && (los || d < 6);
-    if (e.hunt) e.idle = false; // a que rondava lá adiante viu o andarilho: agora vem atrás
+    // ronda → escuta (parada, ao ouvir) → investiga (corre ao ponto do som) → busca (vaga em volta) → ronda; a luz leva a foge
+    e.hearT -= dt;
+    if (e.hearT <= 0) { e.hearT = .5; if (e.state !== 'foge' && breathHeard(e)) { hear(e, player.x, player.z); if (breathWaveT <= 0) { breathWaveT = 2; addWave(player.x, player.z, 2.2); } } }
+    if (e.state === 'escuta' && (e.stateT -= dt) <= 0) e.state = 'investiga';
+    if ((e.state === 'busca' || e.state === 'foge') && (e.stateT -= dt) <= 0) { e.state = 'ronda'; e.path = []; }
+    e.hunt = e.state === 'investiga' || e.state === 'foge';
     e.lit = false;
-    if (on && d < 11 && los) { const cosA = (-dx * aimX + -dz * aimZ) / Math.max(d, 1e-3); if (cosA > Math.cos(.42)) e.lit = true; }
-    if (e.lit) { e.stun += dt; if (e.stun > 1.3) { vanish(e, 'luz'); continue; } }
+    if (on && d < 11 && !segBlocked(e.x, e.z, player.x, player.z)) { const cosA = (-dx * aimX + -dz * aimZ) / Math.max(d, 1e-3); if (cosA > Math.cos(.42)) e.lit = true; }
+    if (e.lit && e.state !== 'foge') { e.stun += dt; if (e.stun > 1.3) scare(e); }
     else e.stun = Math.max(0, e.stun - dt * .4);
-    // As pacíficas também se desfazem na luz; só a movimentação é diferente.
-    if (e.calm) { updateCalm(e, dt, d); continue; }
-    const speed = e.lit ? 0 : (e.hunt ? Math.min(4.6, 3.3 + levelN * .12) : 1.5) * (e.kind === 'lobo' ? 1.15 : e.kind === 'palha' ? .8 : 1); // a palha é lenta, mas não para
+    const stopped = e.state === 'escuta' || (e.lit && e.state !== 'foge');
+    const speed = stopped ? 0 : (e.hunt ? Math.min(4.6, 3.3 + levelN * .12) : 1.5) * (e.kind === 'lobo' ? 1.15 : 1);
     e.repath -= dt;
-    let tx = player.x, tz = player.z;
-    if (ignore || e.idle) { // vaga de célula em célula, sem rumo
+    let tx = e.x, tz = e.z;
+    if (e.state === 'investiga') {
+      tx = e.noiseX; tz = e.noiseZ;
+      if (e.repath <= 0) {
+        e.repath = .5; const p = bfsPath(Math.floor(e.x / C), Math.floor(e.z / C), Math.floor(tx / C), Math.floor(tz / C));
+        e.path = p || []; if (!p) { e.state = 'busca'; e.stateT = 6; } // sem caminho até o som: desiste
+      }
+      if (!e.path.length && Math.hypot(tx - e.x, tz - e.z) < .4) { e.state = 'busca'; e.stateT = 6; } // chegou e não há nada: procura em volta
+    } else if (e.state !== 'foge' || !e.path.length) { // vaga de célula em célula; na ronda tende a ir na direção do andarilho, para a ameaça não sumir
       e.path = [];
-      if (!e.wander || Math.hypot(e.wander[0] - e.x, e.wander[1] - e.z) < .25) { const nb = cellNbrs(Math.floor(e.x / C), Math.floor(e.z / C)), [a, b] = nb.length ? nb[Math.floor(Math.random() * nb.length)] : [Math.floor(e.x / C), Math.floor(e.z / C)]; e.wander = [(a + .5) * C, (b + .5) * C]; }
+      if (!e.wander || Math.hypot(e.wander[0] - e.x, e.wander[1] - e.z) < .25) {
+        const ci = Math.floor(e.x / C), cj = Math.floor(e.z / C), nb = cellNbrs(ci, cj); let pick = nb.length ? nb[Math.floor(Math.random() * nb.length)] : [ci, cj];
+        if (e.state === 'ronda' && !ignore && nb.length && Math.random() < .35) pick = nb.reduce((b, c) => Math.hypot((c[0] + .5) * C - player.x, (c[1] + .5) * C - player.z) < Math.hypot((b[0] + .5) * C - player.x, (b[1] + .5) * C - player.z) ? c : b);
+        e.wander = [(pick[0] + .5) * C, (pick[1] + .5) * C];
+      }
       [tx, tz] = e.wander;
-    } else { e.wander = null; if (e.repath <= 0) { e.repath = .5; e.path = bfsPath(Math.floor(e.x / C), Math.floor(e.z / C), Math.floor(player.x / C), Math.floor(player.z / C)) || []; } }
+    }
     if (e.path.length) { const [i, j] = e.path[0]; tx = (i + .5) * C; tz = (j + .5) * C; if (Math.hypot(tx - e.x, tz - e.z) < .25) e.path.shift(); }
     const mx = tx - e.x, mz = tz - e.z, ml = Math.hypot(mx, mz);
     if (ml > .01 && speed > 0) { const s = Math.min(ml, speed * dt); e.x += mx / ml * s; e.z += mz / ml * s; e.face = Math.atan2(mx, mz); }
     const sh = e.lit ? (Math.random() - .5) * .08 : 0;
     e.rig.root.position.set(e.x + sh, 0, e.z); e.rig.root.rotation.y = e.face;
-    if (e.kind === 'palha') e.anim.play(speed === 0 ? 'Idle_Neutral' : 'Walk_Heavy', { speed: speed / 1.9, fade: .35 }); // passada casada com a velocidade
-    else e.anim.play(speed === 0 ? 'Idle_Neutral' : e.hunt ? 'Run_Neutral' : 'Walk_Neutral', { speed: e.hunt ? .9 : .55 });
+    e.anim.play(speed === 0 ? 'Idle_Neutral' : e.hunt ? 'Run_Neutral' : 'Walk_Neutral', { speed: e.hunt ? .9 : .55 });
     e.anim.update(dt);
-    if (e.kind === 'aranha') { // pés plantados + IK em coordenadas de mundo; cada pouso perto raspa o chão
+    if (e.kind === 'aranha') { // pés plantados + IK em coordenadas de mundo; cada pouso perto raspa o chão, do lado de onde ela está
       e.rig.root.position.set(0, 0, 0); e.rig.root.rotation.y = 0;
-      updateSpider(e.rig, e.x + sh, e.z, e.face, dt, clamp(e.stun / 1.3, 0, 1)); // na luz se encolhe; fora dela se abre devagar
-      for (const l of e.rig.legs) if (l.landed) { l.landed = false; if (d < 14 && Math.random() < .5) footstep(surfaceAt(l.foot.x, l.foot.z), .22 * (1 - d / 14), true); }
+      updateSpider(e.rig, e.x + sh, e.z, e.face, dt, Math.max(clamp(e.stun / 1.3, 0, 1), e.state === 'escuta' ? .35 : 0)); // na luz se encolhe; escutando, abaixa o corpo
+      for (const l of e.rig.legs) if (l.landed) { l.landed = false; if (d < 14 && Math.random() < .5) panned(e.x, () => footstep(surfaceAt(l.foot.x, l.foot.z), .22 * (1 - d / 14), true)); }
     }
-    if (d < .75 && !player.dead && !ignore) {
+    if (d < .75 && !player.dead && !ignore && e.state !== 'foge') {
       standUp(); player.san -= 34; player.hurt = 1.2; shake = .5; flash = -.35; glitch = 1.2;
       player.anim.play('Hit_Front_Light', { restart: true, onEnd: () => player.anim.play('Idle_Neutral') });
-      vanish(e, 'toque'); showMsg(`${pron(e)} te atravessou`);
+      vanish(e); showMsg(`${pron(e)} te atravessou`);
       if (player.san <= 0) die();
     }
   }
 }
-// --- a criatura calma: não ataca; procura a cadeira livre mais perto, anda até ela e senta ---
 const seatFree = c => !c.taken && !(woman && Math.hypot(c.x - woman.x, c.z - woman.z) < .5);
-function findSeat(e) {
-  let best = null, bd = 30;
-  for (const ch of chunks.values()) for (const c of ch.chairs) { const d = Math.hypot(c.x - e.x, c.z - e.z); if (d < bd && seatFree(c)) { bd = d; best = c; } }
-  return best;
-}
-function updateCalm(e, dt, d) {
-  const C = L.C;
-  if (!e.seat) {
-    e.sitting = false; e.seatT -= dt;
-    if (e.seatT <= 0) { e.seatT = 2; e.seat = findSeat(e); if (e.seat) { e.seat.taken = e; e.repath = 0; } }
-  }
-  if (e.sitting) {
-    e.anim.play('Sit_Chair', { fade: .4 });
-    e.rig.root.position.set(e.x, .54 - e.rig.hipsBase * (e.rig.k || 1), e.z); e.rig.root.rotation.y = e.face;
-  } else {
-    let tx = e.x, tz = e.z, speed = 0;
-    if (e.seat) {
-      const si = Math.floor(e.seat.x / C), sj = Math.floor(e.seat.z / C);
-      e.repath -= dt;
-      if (e.repath <= 0) { e.repath = 1; e.path = bfsPath(Math.floor(e.x / C), Math.floor(e.z / C), si, sj) || []; }
-      tx = e.seat.x; tz = e.seat.z; speed = 1.1;
-      if (e.path.length) { const [i, j] = e.path[0]; tx = (i + .5) * C; tz = (j + .5) * C; if (Math.hypot(tx - e.x, tz - e.z) < .25) e.path.shift(); }
-    }
-    const mx = tx - e.x, mz = tz - e.z, ml = Math.hypot(mx, mz);
-    if (e.seat && !e.path.length && Math.hypot(e.seat.x - e.x, e.seat.z - e.z) < .12) {
-      e.x = e.seat.x; e.z = e.seat.z; e.face = Math.atan2(0, -e.seat.face); e.sitting = true; // de costas para o encosto
-    } else if (ml > .01 && speed > 0) { const s = Math.min(ml, speed * dt); e.x += mx / ml * s; e.z += mz / ml * s; e.face = Math.atan2(mx, mz); }
-    else if (d < 12) e.face = Math.atan2(player.x - e.x, player.z - e.z); // sem cadeira: fica parada olhando
-    e.anim.play(speed > 0 && ml > .01 ? (e.kind === 'palha' ? 'Walk_Heavy' : 'Walk_Neutral') : 'Idle_Neutral', { speed: e.kind === 'palha' ? .6 : .5 });
-    e.rig.root.position.set(e.x, 0, e.z); e.rig.root.rotation.y = e.face;
-  }
-  e.anim.update(dt);
-  if (d < 4 && !e.met) { e.met = true; showMsg(`${pron(e)} só quer sentar`); }
-}
 
 // --- fumaça: sprites macios que sobem, crescem, ondulam e somem (como a FUMAÇA do index.html) ---
 class Smoke {
@@ -2553,8 +2561,8 @@ function updateCat(dt, t) {
   c.head.rotation.y = moving ? 0 : Math.sin(t * .6 + cat.face) * .6;
   c.tail.rotation.y = Math.sin(t * (moving ? 3 : 1.4)) * .4;
   c.root.position.set(cat.x, 0, cat.z); c.root.rotation.y = cat.face;
-  if (d < 3 && !cat.met) { cat.met = true; player.san = 100; showMsg('um gato — a sanidade volta'); meow(); flash = .2; }
-  cat.meowT -= dt; if (cat.meowT <= 0) { cat.meowT = 8 + Math.random() * 14; if (d < 10) meow(); }
+  if (d < 3 && !cat.met) { cat.met = true; player.san = 100; showMsg('um gato — a sanidade volta'); meow(); makeNoise(cat.x, cat.z, 14); flash = .2; }
+  cat.meowT -= dt; if (cat.meowT <= 0) { cat.meowT = 8 + Math.random() * 14; if (d < 10) meow(); makeNoise(cat.x, cat.z, 14); } // o miado atrai a criatura, ouvindo ou não
 }
 function updateItems(t) { for (const ch of chunks.values()) for (const it of ch.items) it.mesh.position.y = .35 + Math.sin(t * 2 + it.ph) * .08; }
 
@@ -2593,10 +2601,17 @@ function blip(f0, f1, dur, vol, type = 'square') {
 /* passos: um chiado único em banda estreita soava como metal. Agora cada passo é o baque grave do peso (ruído
    marrom, sem tom) + a textura da superfície em grãos curtos e aleatórios, com ataque suave e calcanhar/ponta
    separados; tudo varia um pouco a cada passo para não repetir igual */
+let grainOut = null;
 function grain(at, dur, freq, q, vol, type = 'bandpass', buf = AU.nb) {
   const s = AC.createBufferSource(); s.buffer = buf; const f = AC.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
   const gg = AC.createGain(), t0 = AC.currentTime + at; gg.gain.setValueAtTime(0, t0); gg.gain.linearRampToValueAtTime(vol, t0 + Math.min(.006, dur * .2)); gg.gain.exponentialRampToValueAtTime(.0005, t0 + dur);
-  s.connect(f); f.connect(gg); gg.connect(AU.master); s.start(t0, Math.random() * 1.5); s.stop(t0 + dur + .05);
+  s.connect(f); f.connect(gg); gg.connect(grainOut || AU.master); s.start(t0, Math.random() * 1.5); s.stop(t0 + dur + .05);
+}
+// toca os grãos com direção: à esquerda ou à direita do andarilho, conforme x
+function panned(x, play) {
+  if (!AC || !AC.createStereoPanner) return play();
+  const p = AC.createStereoPanner(); p.pan.value = clamp((x - player.x) / 10, -1, 1); p.connect(AU.master);
+  grainOut = p; play(); grainOut = null;
 }
 function surfaceAt(x, z) {
   if (kindAt(x, z) === 'out') return 'terra';
@@ -2656,6 +2671,7 @@ const ICONS = {
   signal: ['....#', '...##', '..###', '.####', '#####'], gear: ['#.#.#', '.###.', '##.##', '.###.', '#.#.#'],
   eye: ['.###.', '#...#', '#.#.#', '#...#', '.###.'],
   coffee: ['.#.#.', '#.#..', '####.', '#####', '.##..'], cat: ['#...#', '#####', '#.#.#', '#####', '.###.'],
+  phone: ['#####', '#.#.#', '..#..', '.###.', '.###.'],
 };
 // d = letreiro largo ("PORTAL"), m = rótulos mono ("BOOT SEQUENCE INITIATED", "01:25:43")
 const FONT = { d: { fam: '"Krona One", "Arial Black", sans-serif', ls: .02 }, m: { fam: '"Share Tech Mono", Consolas, monospace', ls: .08 } };
@@ -2742,6 +2758,7 @@ function drawItems(dt, t) {
     for (const it of ch.items) worldIcon(it, it.mesh.position.y + .25, ITEM_ICON[it.type], itemCol(it.type), dt);
     for (const m of ch.machines) if (!collected.has(m.key)) worldIcon(m, 2.1 + Math.sin(t * 2 + m.x) * .08, 'coffee', itemCol('cafe'), dt); // máquinas que ainda servem
   }
+  if (phone) worldIcon(phone, 1.6 + Math.sin(t * 16) * .06, 'phone', Z.cream, dt);
 }
 
 // ---------- HUD ----------
@@ -2765,8 +2782,8 @@ function drawStatus() {
   row(458, 'flashlight', player.bat / 100, player.bat < 15);
   if (player.batK < 1) txt(g, '×5', 164, 461.5, 'm', 9); // a pilha da mulher do canto
   row(476, 'breath', player.stam / 100, player.stamLock > 0);
-  const has = player.cafe > 0; // o copo: só aparece cheio enquanto há café
-  icon(g, 'coffee', 166, 472, 1.6, has ? Z.cream : DIM, has); if (has) meter(180, 473, 40, player.cafe / 100, player.cafe < 20);
+  const has = player.cafe > 0 || player.copo; // o copo: aceso enquanto está na mão; vazio, dá para jogar
+  icon(g, 'coffee', 166, 472, 1.6, has ? Z.cream : DIM, has); if (player.cafe > 0) meter(180, 473, 40, player.cafe / 100, player.cafe < 20); else if (player.copo) keycap(g, 'G', 180, 470, 12);
 }
 function drawResources(t) {
   for (let k = 0; k < 3; k++) icon(g, 'almond_water', 488 - 8 - (2 - k) * 12, 436, 1.6, k < player.agua ? Z.cream : DIM, k < player.agua);
@@ -2789,9 +2806,12 @@ function toastSpec(s) {
   let sp = null;
   if (/^\[E\] pegar café/.test(s)) sp = { key: 'E', title: 'PEGAR CAFÉ' };
   else if (/^\[E\] sentar/.test(s)) sp = { key: 'E', title: 'SENTAR' };
+  else if (/^\[E\] atender/.test(s)) sp = { key: 'E', title: 'ATENDER' };
   else if (/\[E\]/.test(s)) sp = { key: 'E', title: 'ATRAVESSAR' };
+  else if (/telefone calou/.test(s)) sp = { ic: 'phone', title: 'SILÊNCIO' };
+  else if (/^sem ar/.test(s)) sp = { ic: 'breath', title: 'SEM AR', off: true };
   else if (/^café quente/.test(s)) sp = { ic: 'coffee', title: '+ CAFÉ' };
-  else if (/café acabou/.test(s)) sp = { ic: 'coffee', title: 'SEM CAFÉ', off: true };
+  else if (/café acabou/.test(s)) sp = { ic: 'coffee', title: 'COPO VAZIO', key: 'G' };
   else if (/^um gato/.test(s)) sp = { ic: 'cat', title: 'UM GATO' };
   else if (/^água de amêndoa/.test(s)) sp = { ic: 'almond_water', title: '+1 ÁGUA', key: 'R' };
   else if (/^bebeu|^o gosto/.test(s)) sp = { ic: 'sanity', title: '+ SANIDADE' };
@@ -2801,13 +2821,10 @@ function toastSpec(s) {
   else if (/pilha acabou/.test(s)) sp = { ic: 'battery', title: 'SEM PILHA', off: true };
   else if (/fôlego/.test(s)) sp = { ic: 'breath', title: 'SEM FÔLEGO', off: true };
   else if (/parede cedeu/.test(s)) sp = { ic: 'sanity', title: '− SANIDADE', off: true };
-  else if (/desfez na luz/.test(s)) sp = { ic: 'eye', title: 'AFASTADO' };
-  else if (/só quer sentar/.test(s)) sp = { ic: 'entity', title: 'QUIETA' };
+  else if (/fugiu da luz/.test(s)) sp = { ic: 'eye', title: 'AFASTADO' };
   else if (/^uma mulher/.test(s)) sp = { ic: 'face', title: 'UMA MULHER FUMANDO' };
   else if (/floresce/.test(s)) sp = { ic: 'heart', title: '+ SANIDADE' };
   else if (/pegando fogo/.test(s)) sp = { ic: 'sanity', title: 'FOGO', off: true };
-  else if (/pegou fogo/.test(s)) sp = { ic: 'entity', title: 'EM CHAMAS' };
-  else if (/virou cinza/.test(s)) sp = { ic: 'entity', title: 'CINZAS' };
   else if (/^el[ea] /.test(s)) sp = { ic: 'entity', title: 'CONTATO', off: true };
   else if (/paleta|imagem/.test(s)) sp = { ic: 'gear', title: s.toUpperCase() };
   else if (/^volume/.test(s)) sp = { ic: 'signal', title: s.toUpperCase() };
@@ -2844,6 +2861,7 @@ function drawHUD(dt, t) {
     if (msg.t <= 0) msg = null;
   }
   if (player.noclipT > 0) meter(216, 410, 80, player.noclipT / .8, false);
+  if (player.holding) { icon(g, 'breath', 200, 419, 1.6); meter(216, 420, 80, 1 - player.holdT / player.holdMax, player.holdT > player.holdMax - 2); } // o ar que resta
   drawCrosshair();
 }
 
@@ -2891,10 +2909,10 @@ function drawTitle(t) {
   txt(g, T.subtitulo, 256, 254, 'm', 13, Z.greyL, { align: 'center' });
   if (Math.floor(t * 1.4) % 2 === 0) { const kw = keyW('ENTER', 14), tw = measure('m', 10, 'INICIAR'), X = 256 - (kw + 6 + tw) / 2; keycap(g, 'ENTER', X, 276); txt(g, 'INICIAR', X + kw + 6, 286.5, 'm', 10); }
   // controles: tecla + uma palavra
-  const rows = [[['WASD', 'MOVER'], ['SHIFT', 'CORRER'], ['F', 'LUZ'], ['M', 'MAPA']], [['R', 'BEBER'], ['E', 'USAR'], ['Q', 'ATRAVESSAR']]];
+  const rows = [[['WASD', 'MOVER'], ['SHIFT', 'CORRER'], ['F', 'LUZ'], ['M', 'MAPA']], [['R', 'BEBER'], ['E', 'USAR'], ['Q', 'ATRAVESSAR']], [['ESPAÇO', 'PRENDER O AR'], ['G', 'JOGAR O COPO']]];
   rows.forEach((row, r) => {
     const items = row.map(([k, l]) => [k, l, keyW(k, 12), measure('m', 8.5, l)]), W = items.reduce((a, [, , kw, lw]) => a + kw + 4 + lw + 14, -14);
-    let X = 256 - W / 2; const Y = 420 + r * 20;
+    let X = 256 - W / 2; const Y = 408 + r * 20;
     for (const [k, l, kw, lw] of items) { keycap(g, k, X, Y, 12); txt(g, l, X + kw + 4, Y + 8.8, 'm', 8.5); X += kw + 4 + lw + 14; }
   });
   drawRec(t);
@@ -2921,7 +2939,7 @@ function drawEnd(dt, t) {
 const FIXED_SEED = +qs.get('seed') || 0;
 function newRun() {
   T.seed = FIXED_SEED || 1 + Math.floor(Math.random() * 0x3fffffff);
-  Object.assign(player, { san: 100, bat: 100, stam: 100, agua: 1, cafe: 0, sip: 0, sipT: 0, lanterna: true, hurt: 0, dead: false, seat: null, ignored: false, sink: 0, batK: 1 });
+  Object.assign(player, { san: 100, bat: 100, stam: 100, agua: 1, cafe: 0, sip: 0, sipT: 0, lanterna: true, hurt: 0, dead: false, seat: null, ignored: false, sink: 0, batK: 1, holding: false, holdT: 0, holdCD: 0, puff: 0, breathT: 0, copo: false });
   Object.assign(stats, { salas: 0, niveis: 0, notas: new Set(), tempo: 0, afastados: 0 });
   collected.clear(); player.anim.play('Idle_Neutral', { restart: true });
   startLevel(0); game = 'play';
@@ -3012,6 +3030,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyM') game = 'map';
   if (e.code === 'KeyF') { player.lanterna = !player.lanterna; blip(1400, 1200, .04, .08); }
   if (e.code === 'KeyR') drink();
+  if (e.code === 'KeyG') throwCup();
 });
 addEventListener('keyup', e => keys.delete(e.code));
 addEventListener('blur', () => keys.clear());
@@ -3025,7 +3044,7 @@ addEventListener('wheel', e => { zoom = clamp(zoom + Math.sign(e.deltaY) * 2, 16
 
 /* Controles de toque (celular): só aparecem no primeiro toque na tela.
    Metade esquerda: joystick que nasce onde o dedo encosta (empurrar até a borda = correr).
-   Botões à direita mandam as mesmas teclas do teclado (E, Q segurado, R, F, M).
+   Botões à direita mandam as mesmas teclas do teclado (E, Q segurado, R, F, M, Espaço segurado, G).
    Tocar fora dos botões fecha bilhete/mapa e começa/recomeça a partida. Pinça com dois dedos = zoom. */
 const sendKey = (code, down) => dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { code }));
 const touchUI = document.createElement('div');
@@ -3035,7 +3054,7 @@ stickBase.style.cssText = 'position:absolute;width:120px;height:120px;margin:-60
 stickKnob.style.cssText = 'position:absolute;left:50%;top:50%;width:48px;height:48px;margin:-24px 0 0 -24px;background:#ece8d4;border-radius:50%;opacity:.7';
 stickBase.appendChild(stickKnob); touchUI.appendChild(stickBase);
 const touchBtns = [ // [rótulo, tecla, direita px, baixo px]
-  ['E', 'KeyE', 24, 150], ['Q', 'KeyQ', 104, 110], ['R', 'KeyR', 24, 230], ['F', 'KeyF', 104, 190], ['M', 'KeyM', 104, 270]];
+  ['E', 'KeyE', 24, 150], ['Q', 'KeyQ', 104, 110], ['R', 'KeyR', 24, 230], ['F', 'KeyF', 104, 190], ['M', 'KeyM', 104, 270], ['AR', 'Space', 184, 150], ['G', 'KeyG', 184, 230]];
 for (const [label, code, rt, bt] of touchBtns) {
   const b = document.createElement('div'); b.textContent = label;
   b.style.cssText = `position:absolute;right:calc(${rt}px + env(safe-area-inset-right));bottom:calc(${bt}px + env(safe-area-inset-bottom));width:64px;height:64px;border:1px solid #ece8d4;border-radius:50%;color:#ece8d4;font:22px "Share Tech Mono",monospace;display:flex;align-items:center;justify-content:center;opacity:.55;touch-action:none`;
@@ -3101,7 +3120,7 @@ let titleT = 0;
 function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(.05, clock.getDelta()), t = clock.elapsedTime;
-  if (game === 'play') { stats.tempo += dt; levelT += dt; updatePlayer(dt, t); updateEntities(dt, t); updateCat(dt, t); updateCrows(dt, t); }
+  if (game === 'play') { stats.tempo += dt; levelT += dt; updatePlayer(dt, t); updateEntities(dt, t); updateNoises(dt); updateCat(dt, t); updateCrows(dt, t); }
   updateRooms(dt, t); updateRoomFlicker(dt, t); updateWoman(dt, t); updateCorner(dt, t); updateBrotos(dt, t); updateBalloons(dt, t); updateRoses(dt);
   if (game === 'trans') {
     fadeT += dt; glitch = Math.max(glitch, 1 - Math.abs(fadeT - 1));
@@ -3115,7 +3134,7 @@ function frame() {
   player.anim.update(dt);
   if (game === 'play' && player.lanterna && player.bat > 0 && player.anim.cur !== 'Hit_Front_Light') prig.j.arm_R.o.rotation.x = -62 * D2R, prig.j.fore_R.o.rotation.x = -10 * D2R;
   // copo na mão esquerda; a cada gole o braço sobe até a boca
-  prig.cup.visible = player.cafe > 0 && !player.dead;
+  prig.cup.visible = (player.cafe > 0 || player.copo) && !player.dead;
   if (game === 'play' && prig.cup.visible && player.anim.cur !== 'Hit_Front_Light') { const k = Math.sin(clamp(player.sip / .5, 0, 1) * Math.PI); prig.j.arm_L.o.rotation.x = -(30 + k * 70) * D2R; prig.j.fore_L.o.rotation.x = -(55 + k * 45) * D2R; }
   musicUpdate(dt);
   audioUpdate(dt);
@@ -3167,7 +3186,7 @@ function cameraAndRender(dt, t) {
   renderer.setRenderTarget(null); renderer.render(postB, ortho);
 }
 
-window.DBG = { player, entities, stats, chunks, get L() { return L; }, get cat() { return cat; }, get woman() { return woman; }, get corner() { return corner; }, get curRoom() { return curRoom; }, burning, altered, pendingRoom, roomLookup, roomOnScreen, ignite, rebuildChunk, layout, startRoomFlicker, placeCorner, h3, bgm, get CUT() { return CUT; }, EXIT, startLevel, spawnEntity, lightLevel, chunkKind, layout, setGame: s => game = s, note: n => { noteOpen = n; stats.notas.add(n); game = 'note'; }, msg: showMsg,go: (x, z) => { player.x = x; player.z = z; } };
+window.DBG = { player, entities, stats, chunks, get L() { return L; }, get cat() { return cat; }, get woman() { return woman; }, get corner() { return corner; }, get curRoom() { return curRoom; }, burning, altered, pendingRoom, roomLookup, roomOnScreen, ignite, rebuildChunk, layout, startRoomFlicker, placeCorner, h3, bgm, get CUT() { return CUT; }, EXIT, startLevel, spawnEntity, lightLevel, chunkKind, layout, setGame: s => game = s, note: n => { noteOpen = n; stats.notas.add(n); game = 'note'; }, msg: showMsg,go: (x, z) => { player.x = x; player.z = z; }, makeNoise, breathHeard, startPhone, roomAt, cellNbrs, get phone() { return phone; }, get waves() { return waves.length; }, get thrown() { return thrown; } };
 startLevel(0); banner = null; game = 'title';
 // pede as fontes da Ref já na abertura (o canvas não dispara o download sozinho)
 Promise.all(['20px "Krona One"', '20px "Share Tech Mono"'].map(f => document.fonts.load(f, 'AZaz09 ÁÀÂÃÉÊÍÓÔÕÚÇáàâãéêíóôõúç—“”'))).catch(() => { }); // com os acentos: nenhum glifo cai na fonte reserva

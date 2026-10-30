@@ -2006,33 +2006,87 @@ function updateFlock(rig, x, z, low, dt, t) {
   }
   rig.on = true;
 }
-/* tripé (pasta level4): um globo escuro com luzes vermelhas sobre três pernas compridas. Cada pé fica plantado e só dá
-   o passo quando se afasta demais, um de cada vez; a pisada é um baque grave que treme o chão */
+/* tripé (pasta level4): um globo escuro com luzes vermelhas sobre três pernas articuladas. Mesmo sistema da aranha
+   (referência Aranha/ref e Aranha/.claude/skills/aranha-3d): pé plantado no mundo, passo em arco adiantado pela velocidade,
+   coxa + IK de 2 ossos (solveKnee) com o osso de baixo em peças (arcJoints) + tarso. Com três pernas só uma sai do chão por
+   vez, e o peso do corpo pende para as duas plantadas; ao pousar o corpo afunda e volta, e o chão treme */
+const TRI = { bodyY: 4.4, hipR: .62, coxa: .5, femur: 2.7, tibia: 2.9, upper: [.34, .33, .33], bowU: .08, lower: [.16, .3, .3, .24], bow: .09, tarsus: .45, reach: 3.2, stepTh: 1.3, stepH: 1.15, lead: 1.7, inertia: 2.5, turn: .3 }; // gira devagar: com três pernas simétricas, girar rápido só arrastaria os pés
+const TRI_NJ = TRI.upper.length + TRI.lower.length + 3; // juntas do quadril ao pé
 function buildTripod() {
-  const dark = new THREE.MeshLambertMaterial({ color: ctone(.06, 'AZ'), flatShading: true }), root = new THREE.Group(), body = new THREE.Group(); root.add(body);
+  const dark = new THREE.MeshLambertMaterial({ color: ctone(.06, 'AZ'), flatShading: true }), metal = new THREE.MeshLambertMaterial({ color: ctone(.2, 'CL'), flatShading: true }), root = new THREE.Group(), body = new THREE.Group(); body.rotation.order = 'XZY'; root.add(body); // o corpo gira em y e depois pende, sem misturar os eixos
   const part = (geo, mat = dark, par = body) => { const m = new THREE.Mesh(geo, mat); m.castShadow = true; par.add(m); return m; };
   part(new THREE.IcosahedronGeometry(1, 1).translate(0, 1.2, 0)); part(new THREE.CylinderGeometry(.7, .45, .4, 8));
   part(new THREE.TorusGeometry(1.25, .04, 5, 20).rotateX(1.2).translate(0, 1.2, 0));
+  const RJ = Array.from({ length: TRI_NJ }, (_, k) => lerp(.17, .065, (k / (TRI_NJ - 1)) ** 1.2));
   const r = mulberry32(77); for (let k = 0; k < 9; k++) { const a = r() * 6.28, u = r() * 1.4 - .7, s = Math.sqrt(1 - u * u), g = .08 + r() * .13; part(new THREE.BoxGeometry(g, g, g).translate(Math.cos(a) * s * 1.01, 1.2 + u * 1.01, Math.sin(a) * s * 1.01), RED_LAMP); }
   const glow = new THREE.Mesh(new THREE.CircleGeometry(2.4, 18).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: ctone(1.1, 'AC'), transparent: true, opacity: .16, depthWrite: false })); root.add(glow); // a luz vermelha no chão: avisa onde ele está
-  const legs = [0, 2.094, 4.189].map(a => { const m = new THREE.Mesh(new THREE.BoxGeometry(.18, 1, .18), dark); m.castShadow = true; root.add(m); return { a, m, fx: 0, fz: 0, t: -1, x0: 0, z0: 0, x1: 0, z1: 0 }; });
-  return { root, body, legs, glow, on: false };
+  const V = () => new THREE.Vector3();
+  const legs = [0, 2.094, 4.189].map(a => {
+    const m = (g, mat = dark) => { const o = new THREE.Mesh(g, mat); o.castShadow = true; root.add(o); return o; };
+    part(new THREE.BoxGeometry(.42, .34, .5).translate(Math.sin(a) * TRI.hipR, -.04, Math.cos(a) * TRI.hipR)); // caixa do quadril, presa ao corpo
+    const bones = RJ.slice(1).map((r, k) => m(new THREE.CylinderGeometry(r, RJ[k], 1, 7)));
+    const nodes = RJ.slice(1, -1).map(r => m(new THREE.IcosahedronGeometry(r * 1.4, 0), metal)); // juntas claras: a articulação lê mesmo em silhueta
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(.11, .11, .11), RED_LAMP); root.add(lamp); // uma luz no joelho
+    return { a, bones, nodes, lamp, piston: m(new THREE.CylinderGeometry(.035, .035, 1, 5), metal), cable: m(new THREE.CylinderGeometry(.016, .016, 1, 4)), pad: m(new THREE.CylinderGeometry(.3, .4, .13, 8)),
+      hip: V(), coxaEnd: V(), knee: V(), ankle: V(), end: V(), rest: V(), foot: V(), from: V(), to: V(), pts: Array.from({ length: TRI_NJ }, V), stepping: false, t: 0, err: 0 };
+  });
+  return { root, body, legs, glow, placed: false, cx: 0, cz: 0, vel: V(), vf: 0, sx: 0, sz: 0, dip: 0, dipV: 0 };
 }
-const _tu = new THREE.Vector3(0, 1, 0), _td = new THREE.Vector3();
-function updateTripod(rig, x, z, dt, d, t) {
-  const REACH = 2.7, by = 4.3 + Math.sin(t * 1.3) * .12; // alto, mas o globo ainda cabe no quadro quando ele está perto
-  rig.body.position.set(x, by, z); rig.body.rotation.y = t * .1; rig.glow.position.set(x, .06, z);
-  if (!rig.on) { rig.on = true; for (const l of rig.legs) { l.fx = x + Math.cos(l.a) * REACH; l.fz = z + Math.sin(l.a) * REACH; } }
-  const stepping = rig.legs.some(l => l.t >= 0);
+const _ta = new THREE.Vector3();
+function updateTripod(rig, x, z, face, dt, d, t) {
+  const S = TRI, wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
+  if (!rig.placed) { rig.cx = x; rig.cz = z; rig.vf = face; }
+  // massa: o corpo segue o ponto lógico com atraso, gira devagar e não dobra esquinas de repente
+  const k = Math.min(1, dt * S.inertia), ox = rig.cx, oz = rig.cz; rig.cx += (x - ox) * k; rig.cz += (z - oz) * k;
+  const idt = 1 / Math.max(dt, 1e-4); rig.vel.set((rig.cx - ox) * idt, 0, (rig.cz - oz) * idt);
+  rig.vf += clamp(wrap(face - rig.vf), -S.turn * dt, S.turn * dt);
+  const cx = rig.cx, cz = rig.cz, speed = rig.vel.length(), dur = clamp(1.35 / (speed + .6), .42, .8);
+  // pernas: descanso preso ao corpo; o pé fica no mundo até se afastar demais
   for (const l of rig.legs) {
-    const hx = x + Math.cos(l.a) * REACH, hz = z + Math.sin(l.a) * REACH; let fy = 0;
-    if (l.t < 0 && !stepping && Math.hypot(l.fx - hx, l.fz - hz) > 1.7) { l.t = 0; l.x0 = l.fx; l.z0 = l.fz; l.x1 = hx; l.z1 = hz; }
-    if (l.t >= 0) {
-      l.t += dt / .6; const u = Math.min(1, l.t); l.fx = l.x0 + (l.x1 - l.x0) * u; l.fz = l.z0 + (l.z1 - l.z0) * u; fy = Math.sin(u * Math.PI) * 1;
-      if (u >= 1) { l.t = -1; const k = clamp(1 - d / 26, 0, 1); if (k > 0) { noiseBurst(.4, 70, .9, .3 * k, 'lowpass'); blip(60, 30, .35, .12 * k, 'sine'); if (d < 11) shake = Math.max(shake, .16 * (1 - d / 11)); } }
+    const a = l.a + rig.vf; l.dx = Math.sin(a); l.dz = Math.cos(a);
+    l.rest.set(cx + l.dx * S.reach, 0, cz + l.dz * S.reach); if (!rig.placed) l.foot.copy(l.rest);
+    l.err = Math.hypot(l.foot.x - l.rest.x, l.foot.z - l.rest.z);
+  }
+  rig.placed = true;
+  // uma de cada vez, a mais atrasada; parado, ele acerta a postura; só uma muito para trás sai junto com outra
+  const air = rig.legs.filter(l => l.stepping).length, th = speed > .15 ? S.stepTh : .35;
+  for (const l of [...rig.legs].sort((a, b) => b.err - a.err)) {
+    if (l.stepping || l.err <= th || (air && l.err < S.stepTh * 2.6) || rig.legs.filter(q => q.stepping).length > 1) continue;
+    l.stepping = true; l.t = 0; l.from.copy(l.foot); l.to.copy(l.rest).addScaledVector(rig.vel, dur * S.lead); l.to.y = 0; break;
+  }
+  // o peso pende para os pés plantados; o corpo sobe um pouco com a perna no ar e afunda ao pousar (mola)
+  let px = 0, pz = 0, pn = 0, lift = 0;
+  for (const l of rig.legs) { if (l.stepping) lift = Math.max(lift, Math.sin(Math.PI * Math.min(1, l.t))); else { px += l.foot.x; pz += l.foot.z; pn++; } }
+  if (pn) { const w = Math.min(1, dt * 3); rig.sx += ((px / pn - cx) * .2 - rig.sx) * w; rig.sz += ((pz / pn - cz) * .2 - rig.sz) * w; }
+  rig.dipV += (-rig.dip * 55 - rig.dipV * 8) * dt; rig.dip += rig.dipV * dt;
+  const bx = cx + rig.sx, bz = cz + rig.sz, by = S.bodyY + rig.dip + lift * .13 + Math.sin(t * 1.3) * .04;
+  rig.body.position.set(bx, by, bz); rig.body.rotation.set(rig.sz * .16, rig.vf, -rig.sx * .16); rig.glow.position.set(bx, .06, bz);
+  for (const l of rig.legs) {
+    if (l.stepping) {
+      l.t += dt / dur; const u = Math.min(1, l.t), s = clamp((u - .1) / .78, 0, 1); // ergue primeiro, avança, assenta por último
+      l.foot.lerpVectors(l.from, l.to, s * s * (3 - 2 * s)); l.foot.y = Math.sin(Math.PI * u) ** .8 * S.stepH;
+      if (l.t >= 1) {
+        l.stepping = false; l.foot.y = 0; rig.dipV -= 1.25;
+        const v = clamp(1 - d / 26, 0, 1); if (v > 0) { noiseBurst(.4, 70, .9, .3 * v, 'lowpass'); blip(60, 30, .35, .12 * v, 'sine'); if (d < 11) shake = Math.max(shake, .16 * (1 - d / 11)); }
+      }
     }
-    const px = x + Math.cos(l.a) * .55, pz = z + Math.sin(l.a) * .55; _td.set(l.fx - px, fy - by, l.fz - pz); const len = _td.length(); _td.divideScalar(len);
-    l.m.position.set((px + l.fx) / 2, (by + fy) / 2, (pz + l.fz) / 2); l.m.scale.y = len; l.m.quaternion.setFromUnitVectors(_tu, _td);
+    const ft = l.foot;
+    l.hip.set(bx + l.dx * S.hipR, by - .04, bz + l.dz * S.hipR);
+    const hdx = ft.x - l.hip.x, hdz = ft.z - l.hip.z, hl = Math.hypot(hdx, hdz) || 1, hx = hdx / hl, hz = hdz / hl;
+    l.coxaEnd.set(l.hip.x + hx * S.coxa, l.hip.y + S.coxa * .2, l.hip.z + hz * S.coxa);
+    l.ankle.set(ft.x + hx * .12, ft.y + S.tarsus, ft.z + hz * .12);
+    solveKnee(l.coxaEnd, l.ankle, S.femur, S.tibia, l.knee, l.end);
+    // quadril → coxa → fêmur em peças → joelho → canela em peças → tornozelo → pé
+    const P = l.pts; let n = 0;
+    P[n++].copy(l.hip); P[n++].copy(l.coxaEnd);
+    n = arcJoints(P, n, l.coxaEnd, l.knee, S.upper, S.bowU, hx, hz); const knee = n; P[n++].copy(l.knee);
+    n = arcJoints(P, n, l.knee, l.end, S.lower, S.bow, hx, hz); P[n++].copy(l.end); P[n++].copy(ft);
+    for (let q = 0; q < l.bones.length; q++) placeBone(l.bones[q], P[q], P[q + 1]);
+    for (let q = 0; q < l.nodes.length; q++) l.nodes[q].position.copy(P[q + 1]);
+    placeBone(l.piston, P[2], P[knee + 2]); // pistão hidráulico por fora do joelho: encurta e alonga enquanto a perna dobra
+    placeBone(l.cable, _ta.set(bx, by + .1, bz), P[knee]); // cabo solto do corpo ao joelho
+    l.lamp.position.copy(P[knee]); l.lamp.position.y += .17;
+    l.pad.position.set(ft.x, ft.y + .065, ft.z);
   }
 }
 function buildCreature(kind) {
@@ -2556,7 +2610,7 @@ function updateEntities(dt, t) {
     if (e.kind === 'cao') { // quatro patas em trote, rabo balançando
       e.walkPh += dt * speed * 3.2; e.rig.legs.forEach((l, k) => { l.rotation.x = speed ? Math.sin(e.walkPh + (k === 0 || k === 3 ? 0 : Math.PI)) * .75 : 0; }); e.rig.tail.rotation.y = Math.sin(t * 7) * .4;
     }
-    if (e.kind === 'tripe') { e.rig.root.position.set(0, 0, 0); e.rig.root.rotation.y = 0; updateTripod(e.rig, e.x, e.z, dt, d, t); }
+    if (e.kind === 'tripe') { e.rig.root.position.set(0, 0, 0); e.rig.root.rotation.y = 0; updateTripod(e.rig, e.x, e.z, e.face, dt, d, t); }
     if (e.kind === 'bando') {
       e.rig.root.position.set(0, 0, 0); e.rig.root.rotation.y = 0; updateFlock(e.rig, e.x, e.z, e.state === 'investiga' || e.state === 'busca', dt, t);
       if (d < 20 && Math.random() < dt * (e.hunt ? 1.2 : .25)) caw(clamp(1 - d / 20, 0, 1) * 1.4);
@@ -3578,7 +3632,7 @@ function cameraAndRender(dt, t) {
   renderer.setRenderTarget(null); renderer.render(postB, ortho);
 }
 
-window.DBG = { player, entities, stats, chunks, get L() { return L; }, get cat() { return cat; }, get woman() { return woman; }, get corner() { return corner; }, get curRoom() { return curRoom; }, burning, altered, pendingRoom, roomLookup, roomOnScreen, ignite, rebuildChunk, layout, startRoomFlicker, placeCorner, h3, bgm, get CUT() { return CUT; }, EXIT, startLevel, spawnEntity, lightLevel, chunkKind, layout, setGame: s => game = s, note: n => { noteOpen = n; stats.notas.add(n); game = 'note'; }, msg: showMsg,go: (x, z) => { player.x = x; player.z = z; }, makeNoise, breathHeard, startPhone, roomAt, cellNbrs, get phone() { return phone; }, get waves() { return waves.length; }, get thrown() { return thrown; } };
+window.DBG = { player, entities, stats, chunks, get L() { return L; }, get cat() { return cat; }, get woman() { return woman; }, get corner() { return corner; }, get curRoom() { return curRoom; }, burning, altered, pendingRoom, roomLookup, roomOnScreen, ignite, rebuildChunk, layout, startRoomFlicker, placeCorner, h3, bgm, get CUT() { return CUT; }, EXIT, startLevel, spawnEntity, lightLevel, chunkKind, layout, setGame: s => game = s, note: n => { noteOpen = n; stats.notas.add(n); game = 'note'; }, msg: showMsg,go: (x, z) => { player.x = x; player.z = z; }, updateTripod, makeNoise, breathHeard, startPhone, roomAt, cellNbrs, get phone() { return phone; }, get waves() { return waves.length; }, get thrown() { return thrown; } };
 startLevel(0); banner = null; game = 'title';
 // pede as fontes da Ref já na abertura (o canvas não dispara o download sozinho)
 Promise.all(['20px "Krona One"', '20px "Share Tech Mono"'].map(f => document.fonts.load(f, 'AZaz09 ÁÀÂÃÉÊÍÓÔÕÚÇáàâãéêíóôõúç—“”'))).catch(() => { }); // com os acentos: nenhum glifo cai na fonte reserva

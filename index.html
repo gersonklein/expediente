@@ -1981,7 +1981,7 @@ function updatePlayer(dt, t) {
   // telefone tocando: [E] atende e o som para
   if (phone && Math.hypot(phone.x - player.x, phone.z - player.z) < 1.1) {
     if (!msg || msg.s !== '[E] atender') showMsg('[E] atender', .3);
-    if (keys.has('KeyE')) { keys.delete('KeyE'); phone = null; phoneT = R(60, 120); showMsg('o telefone calou'); blip(300, 200, .08, .08, 'square'); }
+    if (keys.has('KeyE')) { keys.delete('KeyE'); if (phone.bell) { const n = AC.currentTime; phone.bell.gain.cancelScheduledValues(n); phone.bell.gain.setValueAtTime(0, n); } phone = null; phoneT = R(60, 120); showMsg('o telefone calou'); blip(300, 200, .08, .08, 'square'); }
   }
   // máquina de café: cada uma serve um copo cheio, e fica pingando alto por uns segundos
   let mq = null;
@@ -2121,8 +2121,8 @@ function updateNoises(dt) {
   if (phone) {
     phone.t -= dt; phone.ring -= dt; phone.noiseT -= dt;
     if (phone.noiseT <= 0) { phone.noiseT = 3; makeNoise(phone.x, phone.z, 20); }
-    const v = clamp(1 - Math.hypot(phone.x - player.x, phone.z - player.z) / 30, 0, 1) * .05;
-    if (phone.ring <= 0 && v > .001) { phone.ring = 1.3; blip(1320, 1300, .3, v); setTimeout(() => blip(1040, 1030, .3, v), 340); }
+    const v = clamp(1 - Math.hypot(phone.x - player.x, phone.z - player.z) / 30, 0, 1) * .1;
+    if (phone.ring <= 0 && v > .001) { phone.ring = 3; phone.bell = phoneBell(v, phone.x); }
     if (phone.t <= 0) { phone = null; phoneT = R(60, 120); }
   } else if ((phoneT -= dt) <= 0) startPhone();
   if (thrown) {
@@ -2595,6 +2595,21 @@ function grain(at, dur, freq, q, vol, type = 'bandpass', buf = AU.nb) {
   const gg = AC.createGain(), t0 = AC.currentTime + at; gg.gain.setValueAtTime(0, t0); gg.gain.linearRampToValueAtTime(vol, t0 + Math.min(.006, dur * .2)); gg.gain.exponentialRampToValueAtTime(.0005, t0 + dur);
   s.connect(f); f.connect(gg); gg.connect(grainOut || AU.master); s.start(t0, Math.random() * 1.5); s.stop(t0 + dur + .05);
 }
+// telefone antigo, "trrrriiimmm": o badalo bate 24 vezes por segundo em parciais de sino e, no fim, o sino soa sozinho.
+// Devolve o ganho, para calar ao atender
+function phoneBell(v, x) {
+  if (!AC) return null;
+  const t0 = AC.currentTime, dur = 1.5, gg = AC.createGain(), hit = 1 / 24;
+  [[1180, 1], [1760, .6], [2690, .35]].forEach(([f, a]) => {
+    const o = AC.createOscillator(), oa = AC.createGain(); o.type = 'triangle'; o.frequency.value = f; oa.gain.value = a;
+    o.connect(oa); oa.connect(gg); o.start(t0); o.stop(t0 + dur + .5);
+  });
+  gg.gain.setValueAtTime(0, t0);
+  for (let t = 0; t < dur; t += hit) { gg.gain.setValueAtTime(v, t0 + t); gg.gain.exponentialRampToValueAtTime(v * .25, t0 + t + hit * .95); }
+  gg.gain.setValueAtTime(v, t0 + dur); gg.gain.exponentialRampToValueAtTime(.0005, t0 + dur + .45);
+  if (AC.createStereoPanner) { const p = AC.createStereoPanner(); p.pan.value = clamp((x - player.x) / 10, -1, 1); gg.connect(p); p.connect(AU.master); } else gg.connect(AU.master);
+  return gg;
+}
 // toca os grãos com direção: à esquerda ou à direita do andarilho, conforme x
 function panned(x, play) {
   if (!AC || !AC.createStereoPanner) return play();
@@ -2625,7 +2640,7 @@ function step(v) { footstep(player.sink > .3 ? 'agua' : surfaceAt(player.x, play
 const sfxGlitch = (v = 1) => { noiseBurst(.35 * v, 2400, .6, .3 * v); blip(900, 60, .3 * v, .08 * v, 'sawtooth'); };
 let windT = 0;
 function audioUpdate(dt) {
-  if (!AC) return; const now = AC.currentTime, playing = game === 'play' || game === 'note' || game === 'map';
+  if (!AC) return; const now = AC.currentTime, playing = game === 'play' || game === 'note' || game === 'map' || game === 'help';
   const out = kindAt(player.x, player.z) === 'out';
   AU.hum.gain.setTargetAtTime((playing || game === 'title') && !out ? clamp(lightCache, 0, 1) * .05 + flickNear * .05 : 0, now, .08);
   windT += dt; AU.windF.frequency.setTargetAtTime(300 + Math.sin(windT * .3) * 120, now, .5);
@@ -2889,6 +2904,15 @@ function drawMap() {
   g.restore();
   keycap(g, 'M', 40, 466);
 }
+// atalhos: tecla H, com o jogo em pausa. A paleta (C) fica de fora de propósito
+const HELP_KEYS = [['WASD', 'ANDAR'], ['MOUSE', 'MIRAR A LANTERNA'], ['SHIFT', 'CORRER'], ['ESPAÇO', 'PRENDER O AR (SEGURAR)'], ['F', 'LIGAR A LANTERNA'], ['E', 'USAR, SENTAR, ATENDER'],
+  ['Q', 'ATRAVESSAR A PAREDE (SEGURAR)'], ['R', 'BEBER ÁGUA'], ['G', 'JOGAR O COPO VAZIO'], ['M', 'MAPA'], ['RODA', 'ZOOM'], ['- =', 'VOLUME'], ['0', 'MUDO'], ['H', 'ATALHOS']];
+function drawHelp() {
+  dimScreen(.85);
+  const X = 120, W = 272, kx = X + 64;
+  txt(g, 'ATALHOS', X, 72.5, 'm', 10); rule(g, X, 81, W);
+  HELP_KEYS.forEach(([k, l], i) => { const Y = 94 + i * 24, kw = keyW(k, 14); keycap(g, k, kx - 10 - kw, Y); txt(g, l, kx, Y + 10.5, 'm', 10, Z.cream, { max: W - 64 }); });
+}
 function drawTitle(t) {
   triMark(g, 256, 156, 44);                                                   // logo e frase 30% maiores
   const logo = T.titulo.toUpperCase();
@@ -2897,7 +2921,7 @@ function drawTitle(t) {
   txt(g, T.subtitulo, 256, 254, 'm', 13, Z.greyL, { align: 'center' });
   if (Math.floor(t * 1.4) % 2 === 0) { const kw = keyW('ENTER', 14), tw = measure('m', 10, 'INICIAR'), X = 256 - (kw + 6 + tw) / 2; keycap(g, 'ENTER', X, 276); txt(g, 'INICIAR', X + kw + 6, 286.5, 'm', 10); }
   // controles: tecla + uma palavra
-  const rows = [[['WASD', 'MOVER'], ['SHIFT', 'CORRER'], ['F', 'LUZ'], ['M', 'MAPA']], [['R', 'BEBER'], ['E', 'USAR'], ['Q', 'ATRAVESSAR']], [['ESPAÇO', 'PRENDER O AR'], ['G', 'JOGAR O COPO']]];
+  const rows = [[['WASD', 'MOVER'], ['SHIFT', 'CORRER'], ['F', 'LUZ'], ['M', 'MAPA']], [['R', 'BEBER'], ['E', 'USAR'], ['Q', 'ATRAVESSAR']], [['ESPAÇO', 'PRENDER O AR'], ['G', 'JOGAR O COPO'], ['H', 'ATALHOS']]];
   rows.forEach((row, r) => {
     const items = row.map(([k, l]) => [k, l, keyW(k, 12), measure('m', 8.5, l)]), W = items.reduce((a, [, , kw, lw]) => a + kw + 4 + lw + 14, -14);
     let X = 256 - W / 2; const Y = 408 + r * 20;
@@ -2932,7 +2956,7 @@ function newRun() {
   collected.clear(); player.anim.play('Idle_Neutral', { restart: true });
   startLevel(0); game = 'play';
 }
-/* Troca de paleta em jogo (tecla C ou botão PALETA): relê palette_dither.png, pega as cores que aparecem nela
+/* Troca de paleta em jogo (tecla C; Shift+C escolhe o arquivo): relê palette_dither.png, pega as cores que aparecem nela
    (ignora as raras, até MAXPAL), ordena do escuro para o claro e refaz cena, vinheta e UI. Por file:// o navegador
    não deixa ler os pixels: aí abre um seletor de arquivo. */
 const PAL_FILE = 'palette_dither.png';
@@ -2965,10 +2989,6 @@ function loadPalette(src = `${PAL_FILE}?t=${Date.now()}`, picked = false) {
   img.onerror = () => { if (!picked) palInput.click(); else showMsg('não consegui ler a imagem'); };
   img.src = src;
 }
-const palBtn = Object.assign(document.createElement('button'), { textContent: '↻ PALETA [C]', title: `recarregar ${PAL_FILE} (shift+clique: escolher arquivo)` });
-palBtn.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2;font:14px "Share Tech Mono",monospace;letter-spacing:.08em;padding:4px 12px;cursor:pointer;background:transparent;color:#ece8d4;border:1px solid #ece8d4;border-radius:6px;opacity:.7';
-palBtn.onclick = e => { palBtn.blur(); e.shiftKey ? palInput.click() : loadPalette(); };
-document.body.appendChild(palBtn);
 
 /* Trilha de fundo: sound/Trilha2.mp3 (Trilha2.wav em 160 kbps) em loop durante a partida (fora do prédio fica em 1%).
    A reprodução é liberada no primeiro toque de tecla ou clique (o navegador
@@ -2982,7 +3002,7 @@ try { const v = parseFloat(localStorage.getItem('expediente.vol')); if (v >= 0 &
 const MUSIC_FADE = 1.6;
 let musicCur = 0;
 const musicUpdate = dt => {
-  const playing = game === 'play' || game === 'note' || game === 'map';
+  const playing = game === 'play' || game === 'note' || game === 'map' || game === 'help';
   const target = !musicMuted && playing ? (kindAt(player.x, player.z) === 'out' ? .01 : musicVol) : 0;
   musicCur = dt === undefined ? target : musicCur + (target - musicCur) * (1 - Math.exp(-dt / MUSIC_FADE));
   if (Math.abs(target - musicCur) < .0005) musicCur = target;
@@ -3014,8 +3034,10 @@ addEventListener('keydown', e => {
   if (game === 'end' && endT > 2.5 && (e.code === 'Enter' || e.code === 'Space')) { newRun(); return; }
   if (game === 'note' && ['KeyE', 'Enter', 'Escape', 'Space'].includes(e.code)) { keys.delete('KeyE'); game = 'play'; noteOpen = -1; return; }
   if (game === 'map' && (e.code === 'KeyM' || e.code === 'Escape')) { game = 'play'; return; }
+  if (game === 'help' && (e.code === 'KeyH' || e.code === 'Escape')) { game = 'play'; return; }
   if (game !== 'play') return;
   if (e.code === 'KeyM') game = 'map';
+  if (e.code === 'KeyH') game = 'help';
   if (e.code === 'KeyF') { player.lanterna = !player.lanterna; blip(1400, 1200, .04, .08); }
   if (e.code === 'KeyR') drink();
   if (e.code === 'KeyG') throwCup();
@@ -3032,7 +3054,7 @@ addEventListener('wheel', e => { zoom = clamp(zoom + Math.sign(e.deltaY) * 2, 16
 
 /* Controles de toque (celular): só aparecem no primeiro toque na tela.
    Metade esquerda: joystick que nasce onde o dedo encosta (empurrar até a borda = correr).
-   Botões à direita mandam as mesmas teclas do teclado (E, Q segurado, R, F, M, Espaço segurado, G).
+   Botões à direita mandam as mesmas teclas do teclado (E, Q segurado, R, F, M, Espaço segurado, G, H).
    Tocar fora dos botões fecha bilhete/mapa e começa/recomeça a partida. Pinça com dois dedos = zoom. */
 const sendKey = (code, down) => dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { code }));
 const touchUI = document.createElement('div');
@@ -3042,7 +3064,7 @@ stickBase.style.cssText = 'position:absolute;width:120px;height:120px;margin:-60
 stickKnob.style.cssText = 'position:absolute;left:50%;top:50%;width:48px;height:48px;margin:-24px 0 0 -24px;background:#ece8d4;border-radius:50%;opacity:.7';
 stickBase.appendChild(stickKnob); touchUI.appendChild(stickBase);
 const touchBtns = [ // [rótulo, tecla, direita px, baixo px]
-  ['E', 'KeyE', 24, 150], ['Q', 'KeyQ', 104, 110], ['R', 'KeyR', 24, 230], ['F', 'KeyF', 104, 190], ['M', 'KeyM', 104, 270], ['AR', 'Space', 184, 150], ['G', 'KeyG', 184, 230]];
+  ['E', 'KeyE', 24, 150], ['Q', 'KeyQ', 104, 110], ['R', 'KeyR', 24, 230], ['F', 'KeyF', 104, 190], ['M', 'KeyM', 104, 270], ['AR', 'Space', 184, 150], ['G', 'KeyG', 184, 230], ['?', 'KeyH', 184, 310]];
 for (const [label, code, rt, bt] of touchBtns) {
   const b = document.createElement('div'); b.textContent = label;
   b.style.cssText = `position:absolute;right:calc(${rt}px + env(safe-area-inset-right));bottom:calc(${bt}px + env(safe-area-inset-bottom));width:64px;height:64px;border:1px solid #ece8d4;border-radius:50%;color:#ece8d4;font:22px "Share Tech Mono",monospace;display:flex;align-items:center;justify-content:center;opacity:.55;touch-action:none`;
@@ -3060,7 +3082,7 @@ touchUI.addEventListener('touchstart', e => {
   e.preventDefault();
   for (const t of e.changedTouches) {
     if (game !== 'play') { // telas sem andar: um toque age como Enter (ou fecha o mapa)
-      if (game === 'map') { sendKey('Escape', true); sendKey('Escape', false); }
+      if (game === 'map' || game === 'help') { sendKey('Escape', true); sendKey('Escape', false); }
       else { sendKey('Enter', true); sendKey('Enter', false); }
       continue;
     }
@@ -3164,6 +3186,7 @@ function cameraAndRender(dt, t) {
   g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, UI.width, UI.height); g.setTransform(UIS, 0, 0, UIS, 0, 0);
   if (title) drawTitle(t);
   else if (game === 'map') drawMap();
+  else if (game === 'help') drawHelp();
   else { drawHUD(dt, t); if (game === 'note') drawNote(); if (game === 'end') drawEnd(dt, t); }
   uiTex.needsUpdate = true;
 

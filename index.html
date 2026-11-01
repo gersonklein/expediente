@@ -16,6 +16,7 @@
   "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
 } }
 </script>
+<script src="Chracter/player_model.js"></script>
 </head>
 <body>
 <script type="module">
@@ -466,8 +467,12 @@ const LEVELS = [
   { nome: 'Nível 4', sub: 'A Estrada de Névoa', C: 3, H: 2.6, fora: 1, praca: 0, escuro: .6, quebradas: .2, pisca: .2, ent: 2, listra: 0, aberto: true, subs: { estrada: 1 }, pisoFora: 'relva', criaturas: ['tripe'], paleta: ['#05070a', '#161636', '#054417', '#491c38', '#692d50', '#4d4c67', '#2b7143', '#8e3066', '#497473', '#be5364', '#409965', '#7f7974', '#2fc25d', '#98a590', '#4bd849', '#71dc76', '#7eee46'], ceu: .45, relva: 'VD', nevoa: { cor: '#497473', near: -8, far: 11 },
     pisoDuro: 'concreto', salas: { vazio: 2, estar: 1 }, tons: { piso: .55, parede: .6, topo: .04 }, frase: 'O sinal abre. Não vem ninguém. Algo muito alto anda na névoa.' },
 ];
+// o prólogo (n = -1): o último dia num escritório normal, com a paleta da pasta Intro — ver a seção PRÓLOGO
+const PROLOGO = { nome: 'Último dia', sub: '', prologo: true, criaturas: [], C: 3, H: 2.6, fora: 0, praca: 0, escuro: 9, quebradas: 0, pisca: 0, ent: 0, listra: .06, paleta: ['#331c16', '#3d2142', '#ad0b1e', '#3c4175', '#933539', '#604e4f', '#079392', '#c4618f', '#d66c6d', '#729673', '#a99242', '#a6a4a2', '#e2b288', '#cec7c8', '#a1d7d0', '#f1eadb', '#ffffff'],
+  pisoDuro: 'ladrilho', salas: SALAS0, tons: { piso: .82, parede: .8, topo: .05 } };
 const SUBS = ['O Escritório Sem Fim', 'As Salas Molhadas', 'O Arquivo Morto', 'O Jardim Podado', 'Os Corredores Que Respiram', 'O Andar Que Não Existe', 'A Sala de Espera', 'O Pátio das Lâmpadas'];
 function levelDef(n) {
+  if (n < 0) return { ...PROLOGO, n };
   const b = LEVELS[n % LEVELS.length]; if (n < LEVELS.length) return { ...b, n }; // ao fim do ciclo volta ao primeiro tema, mais difícil (hard)
   const x = Math.floor(n / LEVELS.length), r = mulberry32(n * 31 + T.seed);
   return { ...b, n, nome: 'Nível ' + n, sub: SUBS[(n * 5 + T.seed) % SUBS.length], escuro: Math.max(.46, b.escuro - .04 * x),
@@ -681,7 +686,37 @@ function pickType(r, area) {
   for (const [t, v] of w) { s -= v; if (s <= 0) return t; }
   return 'vazio';
 }
+// planta fixa do prólogo, por bloco: um corredor em U de uns 150 m, da mesa do andarilho até o RH (o tempo da narração).
+// salas [x0, y0, largura, altura, tipo], portas [x, y, d] e vãos abertos [x, y, d]; fora da planta só escuro.
+// o RH é a última sala do bloco: fechar a porta dele não muda o sorteio da mobília das outras
+const PRO_CORR = [0, 3, 8, 1, 'corredor'], PRO_PORTA_RH = [6, 4, 0];
+const PRO_PLANTA = {
+  '0,0': { salas: [[0, 0, 5, 3, 'escritorio'], [5, 0, 3, 3, 'cafe'], PRO_CORR, [0, 4, 4, 4, 'reuniao'], [4, 4, 4, 4, 'arquivo']], portas: [[2, 3, 0], [5, 1, 1], [6, 3, 0], [1, 4, 0], [5, 4, 0]], vaos: [] },
+  '1,0': { salas: [[0, 0, 4, 3, 'maquinas'], [4, 0, 4, 3, 'estar'], PRO_CORR, [0, 4, 5, 4, 'escritorio'], [5, 4, 3, 4, 'arquivo']], portas: [[1, 3, 0], [6, 3, 0], [2, 4, 0], [6, 4, 0]], vaos: [[0, 3, 1]] },
+  '2,0': { salas: [[0, 0, 8, 3, 'escritorio'], PRO_CORR, [0, 4, 6, 4, 'reuniao'], [6, 4, 2, 4, 'corredor']], portas: [[4, 3, 0], [2, 4, 0]], vaos: [[0, 3, 1], [6, 4, 0], [7, 4, 0]] },
+  '2,1': { salas: [[0, 0, 6, 3, 'estar'], [6, 0, 2, 3, 'corredor'], PRO_CORR, [0, 4, 8, 4, 'arquivo']], portas: [[2, 3, 0], [3, 4, 0]], vaos: [[0, 3, 1], [6, 0, 0], [7, 0, 0], [6, 3, 0], [7, 3, 0]] },
+  '1,1': { salas: [[0, 0, 5, 3, 'escritorio'], [5, 0, 3, 3, 'cafe'], PRO_CORR, [0, 4, 4, 4, 'reuniao'], [4, 4, 4, 4, 'maquinas']], portas: [[2, 3, 0], [6, 3, 0], [5, 1, 1], [1, 4, 0], [6, 4, 0]], vaos: [[0, 3, 1]] },
+  '0,1': { salas: [[0, 0, 5, 3, 'arquivo'], [5, 0, 3, 3, 'estar'], PRO_CORR, [0, 4, 4, 4, 'reuniao'], [4, 4, 4, 4, 'rh']], portas: [[2, 3, 0], [6, 3, 0], [2, 4, 0]], vaos: [], rh: true },
+};
+function layoutPrologo(ci, cj) {
+  const cells = new Int16Array(CH * CH), edges = new Map(), plan = PRO_PLANTA[ci + ',' + cj];
+  const rooms = (plan ? plan.salas : [[0, 0, CH, CH, 'vazio']]).map(([x0, y0, w, h, type], id) => {
+    for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) cells[y * CH + x] = id;
+    return { id, x0, y0, w, h, type, dark: type === 'vazio', piso: ['reuniao', 'vazio', 'rh'].includes(type) ? 'carpete' : L.pisoDuro };
+  });
+  for (let y = 0; y < CH; y++) for (let x = 0; x < CH; x++) {
+    if (x > 0 && cells[y * CH + x] !== cells[y * CH + x - 1]) edges.set(ek(x, y, 1), 1);
+    if (y > 0 && cells[y * CH + x] !== cells[(y - 1) * CH + x]) edges.set(ek(x, y, 0), 1);
+  }
+  if (plan) {
+    for (const [x, y, d] of plan.portas) edges.set(ek(x, y, d), 2);
+    for (const [x, y, d] of plan.vaos) edges.set(ek(x, y, d), 0);
+    if (plan.rh && !PRO.fechado) edges.set(ek(...PRO_PORTA_RH), 2);
+  }
+  return { kind: 'in', cells, rooms, edges };
+}
 function layoutIndoor(ci, cj) {
+  if (L.prologo) return layoutPrologo(ci, cj);
   const r = mulberry32((h3(ci, cj, 61) * 4294967295) | 0), cells = new Int16Array(CH * CH), rooms = [], edges = new Map();
   if (L.corredores) { // malha de corredores: linha e coluna CORR de cada bloco, com as salas nos quatro quadrantes
     const addRoom = (x0, y0, w, h, type) => { const id = rooms.length; rooms.push({ id, x0, y0, w, h, type }); for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) cells[y * CH + x] = id; };
@@ -750,6 +785,7 @@ function edgeState(i, j, d) {
   const ci = Math.floor(i / CH), cj = Math.floor(j / CH), lx = mod(i, CH), ly = mod(j, CH);
   if (d === 0 ? ly !== 0 : lx !== 0) { s = layout(ci, cj).edges.get(ek(lx, ly, d)); if (s === undefined) s = 0; }
   else { // borda entre blocos: sempre fechada, com uma ou duas passagens escolhidas pelo hash da borda
+    if (L.prologo) { s = layout(ci, cj).edges.get(ek(lx, ly, d)) ?? 1; edgeMemo.set(key, s); return s; } // o prólogo só passa onde a planta manda
     const ka = chunkKind(ci, cj), kb = d === 0 ? chunkKind(ci, cj - 1) : chunkKind(ci - 1, cj), pos = d === 0 ? lx : ly;
     if (L.corredores && ka === 'in' && kb === 'in' && pos === CORR) { edgeMemo.set(key, 0); return 0; } // o corredor segue de um bloco ao outro
     const s1 = 1 + Math.floor(h3(ci, cj, 91 + d) * (CH - 2)), s2 = 1 + Math.floor(h3(ci, cj, 93 + d) * (CH - 2));
@@ -769,7 +805,7 @@ function fixtureAt(i, j) {
   if (rm && !rm.dark && !(i === EXIT.i && j === EXIT.j)) {
     const lx = mod(i, CH) - rm.x0, ly = mod(j, CH) - rm.y0;
     if (mod(lx - Math.floor((rm.w - 1) / 2), 2) === 0 && mod(ly - Math.floor((rm.h - 1) / 2), 2) === 0) {
-      const r = h3(i, j, 6), round = rm.type === 'corredor', qb = round ? .04 : L.quebradas, pc = round ? .08 : L.pisca; // o corredor é o trecho iluminado, em contraste com as salas
+      const r = h3(i, j, 6), round = rm.type === 'corredor', qb = round && !L.prologo ? .04 : L.quebradas, pc = round && !L.prologo ? .08 : L.pisca; // o corredor é o trecho iluminado, em contraste com as salas
       f = { x: (i + .5) * L.C, z: (j + .5) * L.C, s: r < qb ? 0 : r < qb + pc ? 2 : 1, ph: h3(i, j, 7) * 100, round };
       if (i === 0 && j === 0) f.s = 1;
     }
@@ -795,7 +831,7 @@ function segBlocked(x0, z0, x1, z1) {
 const AMB = .05, SKY = .16;
 function bakeAt(x, y, z, nx, ny, nz, sx = x + nx * .13, sz = z + nz * .13, fast = false) {
   if (kindAt(sx, sz) === 'out') return (L.ceu || SKY) + .12 * ny;
-  const C = L.C, ci = Math.floor(sx / C), cj = Math.floor(sz / C), ly = L.H - .12, rr = Math.min(7.5, 2 * C + .3); let b = AMB;
+  const C = L.C, ci = Math.floor(sx / C), cj = Math.floor(sz / C), ly = L.H - .12, rr = Math.min(7.5, 2 * C + .3); let b = L.prologo && !roomAt(ci, cj).dark ? .42 : AMB; // o último dia é claro: o apagão zera esta luz junto com a das luminárias
   for (let di = -2; di <= 2; di++) for (let dj = -2; dj <= 2; dj++) {
     const f = fixtureAt(ci + di, cj + dj); if (!f || f.s !== 1) continue;
     const dx = f.x - x, dy = ly - y, dz = f.z - z, d = Math.hypot(dx, dy, dz); if (d > rr || d < 1e-3) continue;
@@ -878,6 +914,8 @@ const WIRE_LEN = 1.6, WIRE_C = .12 * 1.3, wireMat = new THREE.LineBasicMaterial(
 // (branco puro tem outro matiz e virava mistura de duas cores, parecendo apagada)
 const lampCol = (k = 1) => PAL[NPAL - 1].clone().multiplyScalar(1.3 * k);
 const fixLitMat = dimPatch(new THREE.MeshBasicMaterial({ color: lampCol() }));
+const doorTopCol = () => PAL[Math.round((NPAL - 1) * .72)].clone(); // nem o branco da luminária: cor chapada, com luz própria
+const doorTopMat = dimPatch(new THREE.MeshBasicMaterial({ color: doorTopCol(), fog: false }));
 const fixDeadMat = new THREE.MeshBasicMaterial({ color: tone(.3) });// halo das luminárias acesas: retângulo arredondado de borda macia, somado à cena logo abaixo do teto
 const glowMat = (() => {
   const c = document.createElement('canvas'); c.width = 64; c.height = 32; const x = c.getContext('2d');
@@ -1129,7 +1167,7 @@ function makeBuilder(props, boxes, spawnX, spawnZ) {
         B.box(x - .22, .42, z - .22, x + .22, .5, z + .22, v, cls, false);
         B.box(x - .22, .5, z + face * .17, x + .22, .95, z + face * .23, v, cls, false);
         B.cyl(x, z, .04, 0, .42, .2, 'CL', 5); boxes.push([x - .2, z - .2, x + .2, z + .2, B.pc]);
-        B.chairs.push({ x, z: z - face * .03, face, pc: B.pc, taken: null });
+        B.chairs.push({ x, z: z - face * .03, face, pc: B.pc, taken: null, v });
       });
     },
     plant(x, z, s = 1) {
@@ -1154,6 +1192,103 @@ function roomDoors(rm, ci, cj) {
   for (let y = gy; y < gy + rm.h; y++) { if (edgeState(gx, y, 1) !== 1) out.push([gx * C, (y + .5) * C]); if (edgeState(gx + rm.w, y, 1) !== 1) out.push([(gx + rm.w) * C, (y + .5) * C]); }
   return out;
 }
+// cadeira giratória da primeira cena: base de 5 pontas com rodízios, encosto de tela e braços. Local +z = atrás
+function cadeiraGiratoria(B, x, z, yaw, v, cls, extra) {
+  B.group(() => {
+    const rb = (x0, y0, z0, x1, y1, z1, vv = v, c = cls) => B.rbox(x, z, yaw, x0, y0, z0, x1, y1, z1, vv, c);
+    for (let k = 0; k < 5; k++) {
+      const a = k * 1.2566 + .3, ex = Math.cos(a) * .3, ez = Math.sin(a) * .3;
+      B.beam(x, .1, z, x + ex, .06, z + ez, .045, .1, 'N'); B.cyl(x + ex * 1.05, z + ez * 1.05, .035, 0, .07, .08, 'N', 6);
+    }
+    B.cyl(x, z, .035, .1, .42, .18, 'N', 6);
+    rb(-.23, .42, -.23, .23, .5, .23); rb(-.2, .5, -.2, .2, .53, .2, v * 1.25);        // assento e almofada
+    rb(-.03, .42, .2, .03, .64, .27, .1, 'N');                                        // haste do encosto
+    rb(-.21, .62, .25, .21, .98, .3); rb(-.16, .67, .23, .16, .93, .25, v * .65);      // moldura e tela
+    for (const s of [-1, 1]) { rb(s * .27 - .025, .48, -.03, s * .27 + .025, .68, .03, .1, 'N'); rb(s * .27 - .045, .68, -.18, s * .27 + .045, .72, .14, .13, 'N'); } // braços
+    B.boxesRef.push([x - .2, z - .2, x + .2, z + .2, B.pc]);
+    B.chairs.push({ x, z: z - .03, face: 1, pc: B.pc, taken: null, v, ...extra });
+  });
+}
+// o cubículo do andarilho: X = centro da cadeira, Z = borda da frente da mesa (ele senta em +z, olhando para -z)
+function cubiculoHeroi(B) {
+  const X = 4.5, Z = 5.6, T0 = .76, deco = (x0, y0, z0, x1, y1, z1, v, c = 'CL') => B.box(x0, y0, z0, x1, y1, z1, v, c, false);
+  PRO.heroi = { X, Z, T0 };
+  B.group(() => { // mesa, gaveteiro à esquerda dele, pé e painel de fundo
+    B.box(X - 1.2, .72, Z - .85, X + .95, T0, Z, .7, 'CL');
+    deco(X - 1.15, 0, Z - .8, X - .62, .72, Z - .02, .62);
+    for (const y of [.16, .38, .58]) { deco(X - 1.15, y + .1, Z - .02, X - .62, y + .112, Z - .012, .3); deco(X - .98, y, Z - .02, X - .79, y + .025, Z + .012, .22, 'N'); }
+    deco(X + .85, 0, Z - .8, X + .92, .72, Z - .05, .45);
+    deco(X - .6, .12, Z - .84, X + .85, .7, Z - .8, .5, 'AC');
+  });
+  B.group(() => { // divisórias de tecido cinza com remate claro
+    B.box(X - 1.3, 0, Z - .95, X + 1.05, 1.22, Z - .87, .52); deco(X - 1.32, 1.22, Z - .97, X + 1.07, 1.25, Z - .85, .85);
+    B.box(X - 1.3, 0, Z - .87, X - 1.22, 1.22, Z, .5); deco(X - 1.32, 1.22, Z - .87, X - 1.2, 1.25, Z + .02, .85);
+  });
+  B.group(() => { // o terminal: a tela acesa vem em montarMesa
+    const mx = X - .2, mz = Z - .56, ya = PRO_MONITOR_YAW, rb = (x0, y0, z0, x1, y1, z1) => B.rbox(mx, mz, ya, x0, y0, z0, x1, y1, z1, .1, 'N');
+    rb(-.14, T0, -.11, .14, T0 + .015, .11); rb(-.03, T0, -.05, .03, T0 + .12, 0); rb(-.25, T0 + .1, -.05, .25, T0 + .45, .02);
+  });
+  B.group(() => { // teclado com as fileiras de teclas, mouse, caneca, canetas, bloco e caderno
+    deco(X - .25, T0, Z - .33, X + .25, T0 + .018, Z - .1, .12, 'N');
+    for (let k = 0; k < 5; k++) deco(X - .235, T0 + .018, Z - .315 + k * .042, X + .235, T0 + .024, Z - .29 + k * .042, .42);
+    deco(X + .32, T0, Z - .42, X + .6, T0 + .006, Z - .16, .14, 'N'); B.ico(X + .46, T0 + .025, Z - .29, .04, .16, 'N', .6);
+    B.cyl(X + .12, Z - .72, .05, T0, T0 + .17, .1, 'N', 8);
+    B.cyl(X - .72, Z - .42, .045, T0, T0 + .11, .55, 'CL', 8);
+    for (const [a, b] of [[-.02, -.01], [.02, .015], [0, .025]]) B.beam(X - .72 + a, T0 + .08, Z - .42 + b, X - .72 + a * 2.5, T0 + .2, Z - .42 + b * 2.5, .012, .2, 'N');
+    deco(X - .66, T0, Z - .16, X - .54, T0 + .014, Z - .04, .96, 'PE');
+    deco(X - 1.14, T0, Z - .28, X - .78, T0 + .03, Z - .03, .12, 'N'); deco(X - 1.12, T0 + .03, Z - .26, X - .8, T0 + .036, Z - .05, .2, 'AZ');
+  });
+  B.group(() => { // pastas e papéis encostados na divisória, à esquerda dele
+    [[.14, 'N'], [.82, 'CL'], [.3, 'AZ'], [.92, 'CL'], [.14, 'N'], [.6, 'AC'], [.14, 'N']].forEach(([v, c], k) => deco(X - 1.19 + k * .075, T0, Z - .82, X - 1.125 + k * .075, T0 + .34 - (k % 3) * .02, Z - .5, v, c));
+    for (let k = 0; k < 6; k++) deco(X - 1.17, T0 + k * .018, Z - .48, X - .82, T0 + .014 + k * .018, Z - .3, k % 2 ? .97 : .85);
+  });
+  B.group(() => { // a mesa do lado, mais perto da câmera: tampo claro e painel vermelho
+    B.box(X - 2.75, .72, Z - .85, X - 1.35, T0, Z + .55, .7, 'CL');
+    deco(X - 2.7, .1, Z + .49, X - 1.4, .72, Z + .54, .52, 'AC'); deco(X - 1.42, 0, Z - .8, X - 1.36, .72, Z + .5, .45);
+  });
+  B.group(() => { // o módulo de trás da divisória: planta, pastas e bandejas
+    B.box(X - 1.3, .72, Z - 2.3, X + 1.45, T0, Z - .97, .7, 'CL');
+    deco(X + 1.45, .05, Z - 2.25, X + 1.5, .74, Z - 1, .52, 'AC'); deco(X + .95, 0, Z - 1.9, X + 1.42, .72, Z - 1.02, .6);
+    B.cyl(X - .35, Z - 1.3, .09, T0, T0 + .16, .85, 'CL', 8, false, .11);
+    for (const [a, y, b, q] of [[0, .32, 0, .16], [.13, .27, .07, .12], [-.13, .28, -.05, .13], [.04, .4, -.09, .11], [-.08, .24, .12, .1]]) B.ico(X - .35 + a, T0 + y, Z - 1.3 + b, q, .5 + y * .4, 'VG');
+    for (let k = 0; k < 4; k++) deco(X + .05 + k * .13, T0, Z - 1.5, X + .17 + k * .13, T0 + .42, Z - 1.03, k === 3 ? .4 : .13, k === 3 ? 'VG' : 'N');
+    for (let k = 0; k < 3; k++) deco(X + .72, T0 + k * .08, Z - 1.5, X + 1.3, T0 + .06 + k * .08, Z - 1.03, k === 1 ? .97 : .78);
+  });
+  cadeiraGiratoria(B, X, Z + .42, 0, .13, 'N', { heroi: true });
+  cadeiraGiratoria(B, X + 1.72, Z - .4, 2.35, .3, 'AZ', { taken: {} }); // a cadeira vazia de quem já foi: ocupada para ninguém sentar
+}
+const PRO_MONITOR_YAW = -.14;
+// sala trancada: uma das portas ganha um portão; a alavanca fica numa parede da mesma sala, apagada, e a lanterna a revela.
+// só em salas com outra porta (dá para entrar e achar a alavanca). Quem ficar do outro lado dá a volta ou atravessa com Q
+const SALA_TRANCADA = .14;
+function salaTrancada(rm, B, ci, cj) {
+  if (L.prologo || L.aberto || (ci === 0 && cj === 0) || rm.dark === undefined || rm.type === 'corredor' || rm.type === 'piscina' || h3(rm.gx, rm.gy, 71) >= SALA_TRANCADA) return;
+  const C = L.C, portas = [];
+  for (let x = rm.gx; x < rm.gx + rm.w; x++) for (const y of [rm.gy, rm.gy + rm.h]) if (edgeState(x, y, 0) === 2) portas.push({ x: (x + .5) * C, z: y * C, d: 0 });
+  for (let y = rm.gy; y < rm.gy + rm.h; y++) for (const x of [rm.gx, rm.gx + rm.w]) if (edgeState(x, y, 1) === 2) portas.push({ x: x * C, z: (y + .5) * C, d: 1 });
+  if (portas.length < 2) return;
+  const { X0, Z0, X1, Z1 } = rm, key = `${levelN}:a:${rm.gx}:${rm.gy}`, aberta = collected.has(key);
+  let spot = null;
+  for (let k = 0; k < 12 && !spot; k++) { // um trecho livre de parede, longe das portas
+    const lado = Math.floor(h3(rm.gx, rm.gy, 72 + k) * 4), u = h3(rm.gy, rm.gx, 90 + k), x = X0 + .4 + u * (X1 - X0 - .8), z = Z0 + .4 + u * (Z1 - Z0 - .8);
+    const c = [{ x, z: Z0, nx: 0, nz: 1 }, { x, z: Z1, nx: 0, nz: -1 }, { x: X0, z, nx: 1, nz: 0 }, { x: X1, z, nx: -1, nz: 0 }][lado];
+    if (B.free(c.x - .25 + (c.nx > 0 ? .25 : c.nx < 0 ? -.25 : 0), c.z - .25 + (c.nz > 0 ? .25 : c.nz < 0 ? -.25 : 0), c.x + .25 + (c.nx > 0 ? .25 : c.nx < 0 ? -.25 : 0), c.z + .25 + (c.nz > 0 ? .25 : c.nz < 0 ? -.25 : 0), rm)) spot = c;
+  }
+  if (!spot) return;
+  const { x, z, nx, nz } = spot, tx = Math.abs(nz) * .09 + .015, tz = Math.abs(nx) * .09 + .015;
+  B.group(() => { // chapa escura na parede, cabo para cima (trancada) ou para baixo (puxada)
+    B.box(x - tx, .85, z - tz, x + tx, 1.3, z + tz, .16, 'N', false);
+    B.beam(x + nx * .02, 1.08, z + nz * .02, x + nx * .2, aberta ? .86 : 1.3, z + nz * .2, .03, .3, 'AC');
+  });
+  if (aberta) return;
+  const porta = portas[Math.floor(h3(rm.gx, rm.gy, 88) * portas.length)], g = DOOR / 2;
+  B.group(() => { // o portão: grades no vão, com uma caixa só de colisão
+    for (let k = 0; k <= 6; k++) { const a = -g + k * DOOR / 6; if (porta.d === 0) B.box(porta.x + a - .02, 0, porta.z - .02, porta.x + a + .02, 2.1, porta.z + .02, .22, 'AZ', false); else B.box(porta.x - .02, 0, porta.z + a - .02, porta.x + .02, 2.1, porta.z + a + .02, .22, 'AZ', false); }
+    for (const y of [.5, 1.2, 1.9]) { if (porta.d === 0) B.box(porta.x - g, y, porta.z - .03, porta.x + g, y + .06, porta.z + .03, .22, 'AZ', false); else B.box(porta.x - .03, y, porta.z - g, porta.x + .03, y + .06, porta.z + g, .22, 'AZ', false); }
+    if (porta.d === 0) B.boxesRef.push([porta.x - g, porta.z - .08, porta.x + g, porta.z + .08, B.pc]); else B.boxesRef.push([porta.x - .08, porta.z - g, porta.x + .08, porta.z + g, B.pc]);
+  });
+  B.levers.push({ key, x: x + nx * .25, z: z + nz * .25, vis: 0 }); B.portoes.push(porta);
+}
 function furnish(rm, B, r) {
   const { X0, Z0, X1, Z1 } = rm, W = X1 - X0, D = Z1 - Z0, cx = (X0 + X1) / 2, cz = (Z0 + Z1) / 2, H = L.H;
   const corners = (s = 1) => { for (const [x, z] of [[X0 + .45, Z0 + .45], [X1 - .45, Z0 + .45], [X0 + .45, Z1 - .45], [X1 - .45, Z1 - .45]]) if (r() < .7 && B.free(x - .3, z - .3, x + .3, z + .3, rm)) B.plant(x, z, s); };
@@ -1172,6 +1307,7 @@ function furnish(rm, B, r) {
     if (r() < .85) B.chair(x - .1, side < 0 ? z0 - .42 : z1 + .42, side, r() < .6 ? .55 : .3, r() < .6 ? 'AC' : 'AZ');
   };
   const t = rm.type;
+  if (L.prologo && t === 'corredor') return; // limpo: o concreto rachado é de outro lugar
   // máquina de café: um ponto onde o andarilho enche o copo (a copa tem a sua na bancada)
   const machine = (x, z) => B.machines.push({ key: `${levelN}:m:${Math.round(x * 10)}:${Math.round(z * 10)}`, x, z, vis: 0 });
   if (L.escritorio && t !== 'cafe' && r() < .3) for (let k = 0; k < 4; k++) { // de pé na parede norte, dispensador virado para a sala
@@ -1185,7 +1321,19 @@ function furnish(rm, B, r) {
     });
     machine(x + .375, Z0 + 1); break;
   }
-  if (t === 'escritorio') {
+  if (t === 'rh') { // mesa da atendente, de frente para a porta; a carta se entrega do lado de cá
+    B.group(() => {
+      B.box(cx - 1.2, .72, cz - .4, cx + 1.2, .78, cz + .4, .85, 'CL');
+      B.box(cx - 1.15, 0, cz - .36, cx + 1.15, .72, cz + .1, .45, 'AC', false);
+      B.box(cx - .9, .78, cz - .1, cx - .4, 1.12, cz + .3, .72, 'CL', false);
+      B.box(cx + .2, .78, cz - .2, cx + .7, .81, cz + .15, .98, 'CL', false); // papéis
+    });
+    B.chair(cx, cz + .85, 1, .3, 'AZ'); B.chairs[B.chairs.length - 1].rh = true;
+    for (let x = X0 + .4; x + .7 < X1 - .4; x += .9) B.box(x, 0, Z1 - .55, x + .7, 1.3, Z1, .7, 'CL'); // arquivos atrás dela
+    PRO.mesa = { x: cx, z: cz - .4, vis: 0 };
+    corners();
+  } else if (t === 'escritorio') {
+    if (L.prologo && rm.gx === 0 && rm.gy === 0) cubiculoHeroi(B); // antes da grade: as mesas comuns desviam dele
     const nD = clamp(Math.floor((W - 2.2) / 1.5), 1, 5), rows = Math.max(1, Math.floor((D - 1.2) / 3.4));
     for (let k = 0; k < rows; k++) {
       const zc = Z0 + (k + .5) * D / rows;
@@ -1480,8 +1628,8 @@ function boxes(B, list) { for (const b of list) B.boxesRef.push(b); }
 const chunks = new Map(); let buildQueue = [];
 function buildChunk(ci, cj) {
   const C = L.C, H = L.H, tn = L.tons, grp = new THREE.Group(), lay = layout(ci, cj), kind = lay.kind;
-  const walls = [], hedges = [], props = [], lit = [], dead = [], glows = [], wires = [], boxesL = [], items = [], shards = [], flick = [], crows = [], balloons = [];
-  const B = makeBuilder(props, boxesL, .5 * C, .5 * C); B.boxesRef = boxesL; B.machines = [];
+  const doorTops = [], walls = [], hedges = [], props = [], lit = [], dead = [], glows = [], wires = [], boxesL = [], items = [], shards = [], flick = [], crows = [], balloons = [];
+  const B = makeBuilder(props, boxesL, .5 * C, .5 * C); B.boxesRef = boxesL; B.machines = []; B.levers = []; B.portoes = [];
   const wall = (x0, z0, x1, z1, y0 = 0, y1 = H, solid = true) => { walls.push(prep(boxGeo(x0, y0, z0, x1, y1, z1, true), tn.parede * (.96 + h3(Math.floor(x0 * 3), Math.floor(z0 * 3), 21) * .06), tn.topo, L.parede)); if (solid) boxesL.push([x0, z0, x1, z1]); };
   const hedge = (x0, z0, x1, z1) => { // sebe: bloco com topo chanfrado
     const v = .3 * (.9 + .2 * h3(Math.floor(x0), Math.floor(z0), 22)), hh = 1.75 + h3(Math.floor(x0), Math.floor(z0), 23) * .2;
@@ -1497,7 +1645,7 @@ function buildChunk(ci, cj) {
     part(c - gh - FW, 0, c - gh, 2.1 + FW, FD); part(c + gh, 0, c + gh + FW, 2.1 + FW, FD);   // montantes
     part(c - gh - FW, 2.1, c + gh + FW, 2.1 + FW, FD);                                       // verga
     part(c - gh, 0, c + gh, .025, FD - .03);                                                 // soleira
-    part(c - gh, H, c + gh, H + .015, WT);                                                   // tampa clara no topo, sobre o vão
+    doorTops.push(new THREE.BoxGeometry(d === 0 ? DOOR + 2 * FW : .34, .03, d === 0 ? .34 : DOOR + 2 * FW).translate(d === 0 ? c : e, H + .04, d === 0 ? e : c)); // a marca da porta, sobre a parede
   };
   // sebe só passa do canto da célula se o canto inteiro for jardim; encostada num prédio para na face da parede
   const outAt = (px, pz) => kindAt(px, pz) === 'out';
@@ -1537,9 +1685,10 @@ function buildChunk(ci, cj) {
     Object.assign(rm, { X0: rm.gx * C + WT + .05, Z0: rm.gy * C + WT + .05, X1: (rm.gx + rm.w) * C - WT - .05, Z1: (rm.gy + rm.h) * C - WT - .05 });
     rm.doors = roomDoors(rm, ci, cj);
     const pc0 = B.pcN + 1, b0 = boxesL.length, key = roomKey(ci, cj, rm);
-    furnish(rm, B, r);
+    if (!(L.prologo && rm.dark)) furnish(rm, B, r);
     for (const seed of altered.get(key) || []) displace(props, boxesL, B.chairs, b0, pc0, B.pcN, rm, seed);
     rooms.set(key, { X0: rm.X0, Z0: rm.Z0, X1: rm.X1, Z1: rm.Z1, b0, b1: boxesL.length });
+    salaTrancada(rm, B, ci, cj);
   } else {
     gardenFeatures(lay, ci, cj, B, r);
     if (lay.sub === 'rosas') roses = makeRoses(grp, ci, cj, boxesL, r);
@@ -1559,7 +1708,7 @@ function buildChunk(ci, cj) {
   }
   // itens: no centro das células, fora da mobília
   for (let a = 0; a < CH; a++) for (let b = 0; b < CH; b++) {
-    const i = ci * CH + a, j = cj * CH + b; if (i === 0 && j === 0) continue;
+    const i = ci * CH + a, j = cj * CH + b; if (L.prologo || (i === 0 && j === 0)) continue;
     const hi = h3(i, j, 15), key = `${levelN}:${i}:${j}`, type = hi < .022 ? 'agua' : hi < .036 ? 'pilha' : hi < .043 ? 'nota' : null;
     if (!type || collected.has(key)) continue;
     const ix = (i + .5) * C + (h3(i, j, 16) - .5) * C * .35, iz = (j + .5) * C + (h3(i, j, 17) - .5) * C * .35;
@@ -1569,7 +1718,7 @@ function buildChunk(ci, cj) {
   }
   // cacos escondidos: vidro, metal ou tábua solta. Só a lanterna os revela (updateShards)
   for (let a = 0; a < CH; a++) for (let b = 0; b < CH; b++) {
-    const i = ci * CH + a, j = cj * CH + b; if ((i === 0 && j === 0) || h3(i, j, 19) >= .04) continue;
+    const i = ci * CH + a, j = cj * CH + b; if (L.prologo || (i === 0 && j === 0) || h3(i, j, 19) >= .04) continue;
     const x = (i + .5) * C + (h3(i, j, 20) - .5) * C * .6, z = (j + .5) * C + (h3(i, j, 21) - .5) * C * .6;
     if (boxesL.some(q => x > q[0] - .3 && x < q[2] + .3 && z > q[1] - .3 && z < q[3] + .3)) continue;
     const type = h3(i, j, 22) * SHARD_MATS.length | 0, mesh = new THREE.Mesh(SHARD_GEO, SHARD_DARK), glint = new THREE.Mesh(SHARD_GLINT, SHARD_MATS[type]);
@@ -1587,7 +1736,7 @@ function buildChunk(ci, cj) {
   const S = CH * C;
   for (const [k, geo] of floorGeos(ci, cj)) { const fl = new THREE.Mesh(geo, FLOOR_MATS[k]); fl.receiveShadow = true; grp.add(fl); }
   const addMerged = (list, mat, shadow = true) => { if (!list.length) return; const mm = new THREE.Mesh(mergeGeometries(list), mat); mm.castShadow = mm.receiveShadow = shadow; grp.add(mm); list.forEach(q => q.dispose()); };
-  addMerged(walls, wallMat); addMerged(hedges, hedgeMat); addMerged(props, propMat);
+  addMerged(walls, wallMat); addMerged(hedges, hedgeMat); addMerged(props, propMat); addMerged(doorTops, doorTopMat, false);
   addMerged(lit, fixLitMat, false); addMerged(dead, fixDeadMat, false);  if (wires.length) { // linha de 1 px escura embaixo, transparente em cima: some antes de virar ruído
     const gg = new THREE.BufferGeometry(), n = wires.length / 3, col = new Float32Array(n * 4);
     for (let k = 0; k < n; k++) col.set(k % 2 ? [WIRE_C, WIRE_C, WIRE_C, 0] : [WIRE_C, WIRE_C, WIRE_C, .9], k * 4);
@@ -1597,7 +1746,7 @@ function buildChunk(ci, cj) {
   if (glows.length) { const gm = new THREE.Mesh(mergeGeometries(glows), glowMat); gm.renderOrder = 3; grp.add(gm); glows.forEach(q => q.dispose()); }
   if (kind === 'in') { const roof = new THREE.Mesh(new THREE.BoxGeometry(S, .3, S).translate(ci * S + S / 2, H + .15, cj * S + S / 2), roofMat); roof.castShadow = true; grp.add(roof); }
   scene.add(grp);
-  const ch = { ci, cj, kind, grp, boxes: boxesL, items, shards, towers: B.towers, machines: B.machines, chairs: B.chairs, pools: B.pools, rooms, crows, balloons, roses, broto, flick, x0: ci * S, z0: cj * S, x1: (ci + 1) * S, z1: (cj + 1) * S };
+  const ch = { ci, cj, kind, grp, boxes: boxesL, items, shards, towers: B.towers, machines: B.machines, levers: B.levers, portoes: B.portoes, chairs: B.chairs, pools: B.pools, rooms, crows, balloons, roses, broto, flick, x0: ci * S, z0: cj * S, x1: (ci + 1) * S, z1: (cj + 1) * S };
   chunks.set(ci + ',' + cj, ch); return ch;
 }
 function disposeChunk(ch) {
@@ -1761,7 +1910,7 @@ class Animator {
 }
 function applyPose(rig, p) {
   for (const k in rig.j) { const j = rig.j[k]; j.o.rotation[j.axis] = j.sign * (p[k] || 0) * D2R; }
-  if (rig.hips) rig.hips.position.y = rig.hipsBase + (p.hipsY || 0);
+  if (rig.hips) rig.hips.position.y = rig.hipsBase + (p.hipsY || 0) * (rig.hipsK ?? 1);
 }
 function limb(w, h, d, v, up = false, cls = 'AZ') { const gg = new THREE.BoxGeometry(w, h, d).translate(0, up ? h / 2 : -h / 2, 0), m = new THREE.Mesh(gg, new THREE.MeshLambertMaterial({ color: ctone(v, cls), flatShading: true })); m.castShadow = true; return m; }
 // andarilho: camisa branca e calça escura como os operadores da planta baixa, lanterna na mão direita
@@ -1785,10 +1934,66 @@ function buildHumanoid(v, { entity = false } = {}) {
     const foot = limb(.13, .06, .22, .05); foot.position.set(0, -.4, .05); shin.add(foot);
     Object.assign(j, { ['arm_' + side]: { o: arm, axis: 'x', sign: -1 }, ['armZ_' + side]: { o: arm, axis: 'z', sign: s }, ['fore_' + side]: { o: fore, axis: 'x', sign: -1 },
       ['leg_' + side]: { o: leg, axis: 'x', sign: -1 }, ['shin_' + side]: { o: shin, axis: 'x', sign: 1 } });
-    if (side === 'R' && !entity) { lamp = new THREE.Mesh(new THREE.BoxGeometry(.07, .07, .22).translate(0, 0, .08), new THREE.MeshBasicMaterial({ color: tone(.9) })); lamp.position.y = -.3; fore.add(lamp); }
+    if (side === 'R' && !entity) { lamp = new THREE.Mesh(new THREE.BoxGeometry(.07, .22, .07).translate(0, -.08, 0), new THREE.MeshBasicMaterial({ color: tone(.9) })); lamp.position.y = -.3; fore.add(lamp); }
     if (side === 'L' && !entity) { cup = new THREE.Mesh(new THREE.CylinderGeometry(.05, .04, .11, 8), new THREE.MeshLambertMaterial({ color: ctone(.92, 'CL') })); cup.position.set(0, -.34, .04); cup.visible = false; fore.add(cup); }
   }
   return { root, hips, hipsBase: .95, j, lamp, cup };
+}
+/* o jogador: a malha da pasta Chracter (gerada por Chracter/build_player_model.py) vestida nos ossos do rig de caixas,
+   que continuam sendo os mesmos grupos: poses, sentar, lanterna e copo funcionam sem mudança. A malha vem em pose A;
+   cada osso de braço guarda na matriz de bind a direção medida na malha, e o rig deixa os braços caídos */
+function vestirJogador(rig) {
+  const M = window.PLAYER_MODEL, dec = (str, Arr) => new Arr(Uint8Array.from(atob(str), c => c.charCodeAt(0)).buffer);
+  const caixas = []; rig.root.traverse(o => { if (o.isMesh && o !== rig.lamp && o !== rig.cup) caixas.push(o); });
+  for (const o of caixas) { o.parent.remove(o); o.geometry.dispose(); o.material.dispose(); }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(dec(M.pos, Int16Array), q => q / 16384), 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(dec(M.nor, Int8Array), 3, true));
+  geo.setAttribute('uv', new THREE.BufferAttribute(dec(M.uv, Uint16Array), 2, true));
+  geo.setAttribute('skinIndex', new THREE.BufferAttribute(dec(M.si, Uint8Array), 4));
+  geo.setAttribute('skinWeight', new THREE.BufferAttribute(dec(M.sw, Uint8Array), 4, true));
+  geo.setIndex(new THREE.BufferAttribute(dec(M.idx, Uint16Array), 1));
+  const img = new Image(), tex = new THREE.Texture(img); img.onload = () => { tex.needsUpdate = true; }; img.src = M.tex;
+  tex.anisotropy = 4;
+  const mesh = new THREE.SkinnedMesh(geo, new THREE.MeshLambertMaterial({ map: tex }));
+  mesh.castShadow = true; mesh.frustumCulled = false; // o osso se afasta da caixa de bind da malha ao animar
+  const J = M.joints, DOWN = new THREE.Vector3(0, -1, 0), V = (p, s = 1) => new THREE.Vector3(p[0] * s, p[1], p[2]);
+  const upper = V(J.elbow).sub(V(J.shoulder)).length();
+  // as juntas do rig vão para as da malha, que tem pernas mais curtas que as do boneco de caixas: a descida do quadril
+  // das poses encolhe na mesma proporção, para os pés e joelhos continuarem no chão
+  rig.hipsBase = J.pelvis; rig.hipsK = J.hip[1] / .91; rig.hips.position.y = J.pelvis;
+  rig.j.spine.o.position.y = J.waist - J.pelvis; rig.j.head.o.position.y = J.neck - J.waist;
+  const bind = {
+    hips: new THREE.Vector3(0, J.pelvis, 0), spine: new THREE.Vector3(0, J.waist, 0), head: new THREE.Vector3(0, J.neck, 0),
+  };
+  const rot = {}, ossos = { hips: rig.hips, spine: rig.j.spine.o, head: rig.j.head.o }, maos = {};
+  for (const [s, side] of [[1, 'L'], [-1, 'R']]) {
+    const arm = rig.j['arm_' + side].o, fore = rig.j['fore_' + side].o, leg = rig.j['leg_' + side].o, shin = rig.j['shin_' + side].o;
+    // grupo fixo entre o tronco e o braço: desencosta o braço caído da camisa sem mexer no eixo das poses
+    const ombro = new THREE.Group(); ombro.position.set(s * J.shoulder[0], J.shoulder[1] - J.waist, J.shoulder[2]); ombro.rotation.z = s * 12 * D2R;
+    rig.j.spine.o.add(ombro); arm.position.set(0, 0, 0); ombro.add(arm); fore.position.y = -upper;
+    leg.position.set(s * J.hip[0], J.hip[1] - J.pelvis, 0); shin.position.y = J.knee - J.hip[1];
+    const sh = V(J.shoulder, s), el = V(J.elbow, s), wr = V(J.wrist, s);
+    bind['arm_' + side] = sh; bind['fore_' + side] = el;
+    rot['arm_' + side] = new THREE.Quaternion().setFromUnitVectors(DOWN, el.clone().sub(sh).normalize());
+    rot['fore_' + side] = new THREE.Quaternion().setFromUnitVectors(DOWN, wr.clone().sub(el).normalize());
+    bind['leg_' + side] = new THREE.Vector3(s * J.hip[0], J.hip[1], 0);
+    bind['shin_' + side] = new THREE.Vector3(s * J.hip[0], J.knee, 0);
+    // lanterna (direita) e copo (esquerda) no centro da mão da malha, no espaço do antebraço
+    const mao = V(J.hand, s).sub(el).applyQuaternion(rot['fore_' + side].clone().invert());
+    if (side === 'R') rig.lamp.position.copy(mao); else rig.cup.position.copy(mao).add(new THREE.Vector3(0, 0, .05)); // o copo à frente dos dedos, senão a mão o esconde
+    // a mão tem osso próprio: parada acompanha o antebraço; ao digitar, teclar() a deita sobre as teclas
+    const mo = new THREE.Group(), antebraco = wr.clone().sub(el).length(); mo.position.y = -antebraco; fore.add(mo);
+    ossos['hand_' + side] = mo; bind['hand_' + side] = wr; rot['hand_' + side] = rot['fore_' + side];
+    const d0 = V(J.hand, s).sub(wr), comp = d0.length(); d0.normalize(); // dedos e palma como estão na malha: a palma olha para o corpo
+    const n0 = new THREE.Vector3(-s, 0, 0).addScaledVector(d0, s * d0.x).normalize();
+    maos[side] = { s, mo, arm, fore, comp, upper, antebraco, malha: new THREE.Matrix4().makeBasis(d0, n0, d0.clone().cross(n0)).transpose(), rotBind: rot['fore_' + side] };
+  }
+  for (const side of ['L', 'R']) for (const k of ['arm_', 'fore_', 'leg_', 'shin_']) ossos[k + side] = rig.j[k + side].o;
+  const _one = new THREE.Vector3(1, 1, 1), _q0 = new THREE.Quaternion();
+  const inv = M.bones.map(n => new THREE.Matrix4().compose(bind[n], rot[n] || _q0, _one).invert());
+  rig.root.add(mesh); mesh.bind(new THREE.Skeleton(M.bones.map(n => ossos[n]), inv), new THREE.Matrix4());
+  rig.mesh = mesh; rig.maos = maos; return rig;
 }
 // gato: caixas com pivôs nas pernas, cabeça e rabo; o andar é um trote diagonal (FL+BR × FR+BL)
 function buildCat(v, cls) {
@@ -2150,8 +2355,23 @@ function strands(n, rx, ry, rz, cy, len0, len1, seed) { // fios saindo da superf
 /* =====================================================================
    5. JOGO: andarilho, sanidade, lanterna, noclip, o Inquilino, itens, saída
    ===================================================================== */
-const prig = buildHumanoid(.16); scene.add(prig.root);
-const player = { x: 0, z: 0, face: 0, anim: new Animator(prig), san: 100, bat: 100, stam: 100, agua: 1, cafe: 0, sip: 0, sipT: 0, lanterna: true, hurt: 0, noclipT: 0, stamLock: 0, dead: false, seat: null, ignored: false, sink: 0, batK: 1, holding: false, holdT: 0, holdMax: 8, holdCD: 0, puff: 0, breathT: 0, copo: false };
+const prig = vestirJogador(buildHumanoid(.16)); scene.add(prig.root);
+/* sombra falsa de contato: elipse preta com fade radial colada no chão, sob os pés; cresce no sentido do passo.
+   Fica fora de prig.root porque o jogador afunda na água e sobe na cadeira, e ela não */
+const contato = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
+  uniforms: { uForca: { value: .525 } }, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+  vertexShader: 'varying vec2 vP; void main() { vP = uv * 2. - 1.; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }',
+  fragmentShader: 'uniform float uForca; varying vec2 vP; void main() { float a = 1. - smoothstep(.14, 1., length(vP)); gl_FragColor = vec4(0., 0., 0., a * uForca); }',
+}));
+contato.position.y = .05; contato.renderOrder = -1; scene.add(contato); // acima do piso mais alto (.04)
+function updateContato() {
+  const passo = Math.max(Math.abs(Math.sin(prig.j.leg_L.o.rotation.x)), Math.abs(Math.sin(prig.j.leg_R.o.rotation.x)));
+  contato.position.x = prig.root.position.x; contato.position.z = prig.root.position.z; contato.rotation.y = player.face;
+  contato.scale.set(1.1, 1, .8 + passo * .55);
+  const f = player.seat ? .28 : .525 * (1 - clamp(player.sink / .3, 0, 1)); // sentado o corpo está longe do chão; na piscina os pés somem na água
+  contato.material.uniforms.uForca.value = f; contato.visible = f > .01;
+}
+const player = { x: 0, z: 0, face: 0, anim: new Animator(prig), san: 100, bat: 100, stam: 100, agua: 1, cafe: 0, sip: 0, sipT: 0, lanterna: false, temLanterna: false, hurt: 0, noclipT: 0, stamLock: 0, dead: false, seat: null, ignored: false, sink: 0, batK: 1, holding: false, holdT: 0, holdMax: 8, holdCD: 0, puff: 0, breathT: 0, copo: false };
 player.anim.play('Idle_Neutral');
 player.anim.onEvent = name => { if (name.startsWith('Step')) step(player.anim.cur === 'Run_Neutral' ? .3 : .18); };
 const selfLight = new THREE.PointLight(0xffffff, 7.5, 4.2, 2); scene.add(selfLight);
@@ -2169,7 +2389,7 @@ const stats = { salas: 0, niveis: 0, notas: new Set(), tempo: 0, afastados: 0 };
 let visited = new Map(), exitSeen = false, spawnT = 25, game = 'title', flash = 0, shake = 0, glitch = 0, fadeT = 0, endT = 0;
 let banner = null, msg = null, noteOpen = -1, levelT = 0, placeName = '';
 
-const ROOM_NAMES = { escritorio: 'sala dos terminais', maquinas: 'sala das fitas', reuniao: 'sala de reunião', estar: 'sala de espera', cafe: 'copa', arquivo: 'arquivo', vazio: 'sala vazia', salao: 'salão de pilares', piscina: 'piscina', corredor: 'corredor', circulo: 'sala do círculo', tvs: 'sala das televisões', mata: 'salão da mata', campo: 'campo de cadeiras', espelhos: 'campo de espelhos', canal: 'canal alagado', estrada: 'estrada' };
+const ROOM_NAMES = { rh: 'recursos humanos', escritorio: 'sala dos terminais', maquinas: 'sala das fitas', reuniao: 'sala de reunião', estar: 'sala de espera', cafe: 'copa', arquivo: 'arquivo', vazio: 'sala vazia', salao: 'salão de pilares', piscina: 'piscina', corredor: 'corredor', circulo: 'sala do círculo', tvs: 'sala das televisões', mata: 'salão da mata', campo: 'campo de cadeiras', espelhos: 'campo de espelhos', canal: 'canal alagado', estrada: 'estrada' };
 function startLevel(n) {
   for (const ch of [...chunks.values()]) disposeChunk(ch);
   for (const e of entities) scene.remove(e.rig.root); entities.length = 0;
@@ -2177,10 +2397,13 @@ function startLevel(n) {
   if (thrown) scene.remove(thrown.m); thrown = null; phone = null; phoneT = R(60, 120);
   for (const f of burning.values()) scene.remove(f.grp); burning.clear(); altered.clear(); pendingRoom.length = 0; curRoom = null; roomFlick = null;
   fireSmoke.clear(); cigSmoke.clear();
-  levelN = n; L = levelDef(n); SEED = (T.seed * 7919 + n * 104729) | 0;
+  removeCast();
+  levelN = n; L = levelDef(n); SEED = L.prologo ? PRO_SEED : (T.seed * 7919 + n * 104729) | 0;
+  if (L.prologo) phoneT = 1e9; // ninguém liga no último dia
   const r = mulberry32(SEED), ang = r() * Math.PI * 2, dist = 62 + 12 * Math.min(n, 5);
   EXIT.i = Math.round(Math.cos(ang) * dist / L.C); EXIT.j = Math.round(Math.sin(ang) * dist / L.C);
   if (L.corredores) EXIT.j = Math.floor(EXIT.j / CH) * CH + CORR; // a saída fica sobre um corredor
+  if (L.prologo) EXIT.i = EXIT.j = -400; // o último dia não tem porta de saída
   clearMemo(); lastChunk = '';
   CUT.uListra.value = L.listra;
   applyPalette(L.paleta || BASE_PAL, true); // cada nível tem a sua (pastas level N/palette)
@@ -2189,7 +2412,29 @@ function startLevel(n) {
   visited = new Map(); exitSeen = false; spawnT = L.criaturas[0] === 'tripe' ? 8 : Math.max(5, 9 - n * 2); levelT = 0; placeName = '';
   // cada nível só tem o que é dele: a mulher, o gato, os brotos, a piscina e as cafeteiras ficam no escritório
   buildExit(); updateChunks(player.x, player.z, true); placeCat(L.escritorio ? CAT_CHANCE : 0); placeWoman(); removeCorner();
-  showBanner(L.nome, L.sub);
+  removeLanternaItem();
+  if (n > 0) darLanterna(); // quem chega mais fundo (ou escolhe o nível) já tem a lanterna
+  else if (n === 0 && !player.temLanterna) placeLanterna();
+  if (!L.prologo) showBanner(L.nome, L.sub);
+}
+// a lanterna: um objeto no chão da primeira sala do Nível 0, com o ícone sempre à vista
+let lanternaItem = null;
+function removeLanternaItem() { if (lanternaItem) { scene.remove(lanternaItem.mesh); lanternaItem = null; } }
+function darLanterna() { player.temLanterna = true; prig.lamp.visible = true; removeLanternaItem(); }
+function placeLanterna() {
+  removeLanternaItem();
+  const C = L.C, rm = roomAt(0, 0), sx = player.x, sz = player.z; let best = null, bd = 1e9;
+  for (let j = rm.y0; j < rm.y0 + rm.h; j++) for (let i = rm.x0; i < rm.x0 + rm.w; i++) for (const [a, b] of [[.5, .5], [.2, .5], [.8, .5], [.5, .2], [.5, .8]]) { // o ponto livre mais perto, a uns passos de onde ele nasce
+    const x = (i + a) * C, z = (j + b) * C, d = Math.hypot(x - sx, z - sz);
+    if (d >= 2.6 && d < bd && isFree(x, z, .4)) { best = { x, z }; bd = d; }
+  }
+  if (!best) best = { x: sx + 1.5, z: sz }; // sala toda ocupada: fica ao lado dele
+  const grp = new THREE.Group(), mat = c => new THREE.MeshBasicMaterial({ color: c });
+  const corpo = new THREE.Mesh(new THREE.CylinderGeometry(.05, .05, .3, 8).rotateZ(Math.PI / 2), mat(ctone(.45, 'N')));
+  const cabeca = new THREE.Mesh(new THREE.CylinderGeometry(.08, .055, .1, 8).rotateZ(Math.PI / 2).translate(.2, 0, 0), mat(ctone(.75, 'CL')));
+  const vidro = new THREE.Mesh(new THREE.CircleGeometry(.07, 8).rotateY(Math.PI / 2).translate(.252, 0, 0), mat(ctone(1.3, 'CL')));
+  grp.add(corpo, cabeca, vidro); grp.position.set(best.x, .09, best.z); grp.rotation.y = .7; scene.add(grp);
+  lanternaItem = { x: best.x, z: best.z, vis: 0, mesh: grp };
 }
 function showBanner(title, sub = '') { banner = { title, sub, t: 4 }; }
 function showMsg(s, t = 2.2) { msg = { s, t }; }
@@ -2230,6 +2475,8 @@ function updatePlayer(dt, t) {
   if (keys.has('KeyA') || keys.has('ArrowLeft')) ix -= 1;
   if (keys.has('KeyD') || keys.has('ArrowRight')) ix += 1;
   if (stick.on) { ix += stick.x; iz += stick.z; } // joystick virtual (celular)
+  const lock = L.prologo && PRO.trava; // prólogo: parado durante a cena do carimbo
+  if (lock) ix = iz = 0;
   let il = Math.hypot(ix, iz); if (il > 0) { ix /= il; iz /= il; }
   if (player.seat) { if (il > 0 || keys.has('KeyE')) { keys.delete('KeyE'); standUp(); } il = ix = iz = 0; } // sentado: andar ou [E] levanta
   // prender o ar (Espaço): a criatura não ouve a respiração, mas o passo fica lento, depois do limite dói e, ao soltar, o
@@ -2269,10 +2516,11 @@ function updatePlayer(dt, t) {
   const blocked = il > 0 && hit && Math.hypot(p.x - player.x, p.z - player.z) < sp * dt * .35;
   player.x = p.x; player.z = p.z;
   // NOCLIP: segurar Q empurrando uma parede. Ela cede, mas cobra sanidade.
-  if (blocked && keys.has('KeyQ')) {
+  if (blocked && keys.has('KeyQ') && (!L.prologo || PRO.etapa === 'preso')) {
     player.noclipT += dt; glitch = Math.max(glitch, player.noclipT * .9); shake = Math.max(shake, player.noclipT * .08);
     if (player.noclipT > .8) {
       player.noclipT = 0;
+      if (L.prologo) { goDeeper(); return; } // no prólogo a parede leva ao Nível 0
       for (const dd of [.9, 1.25, 1.7, 2.2]) {
         const nx = player.x + ix * dd, nz = player.z + iz * dd;
         if (isFree(nx, nz, .3)) { player.x = nx; player.z = nz; player.san -= 15; glitch = 1.6; flash = .35; sfxGlitch(); showMsg('a parede cedeu'); break; }
@@ -2281,7 +2529,7 @@ function updatePlayer(dt, t) {
   } else player.noclipT = Math.max(0, player.noclipT - dt * 2);
   if (il > 0) { const tgt = Math.atan2(ix, iz); let d = tgt - player.face; d = Math.atan2(Math.sin(d), Math.cos(d)); player.face += d * Math.min(1, dt * 12); }
   mouse.active -= dt;
-  if (mouse.active > 0) {
+  if (mouse.active > 0 && !lock && !(L.prologo && player.seat)) {
     ray.setFromCamera(mouse.ndc, camera);
     if (ray.ray.intersectPlane(aimPlane, aimPt)) { const dx = aimPt.x - player.x, dz = aimPt.z - player.z, dl = Math.hypot(dx, dz); if (dl > .3) { aimX = dx / dl; aimZ = dz / dl; if (il === 0) { const tgt = Math.atan2(aimX, aimZ); let d = tgt - player.face; d = Math.atan2(Math.sin(d), Math.cos(d)); player.face += d * Math.min(1, dt * 10); } } }
   } else { aimX = Math.sin(player.face); aimZ = Math.cos(player.face); }
@@ -2302,6 +2550,7 @@ function updatePlayer(dt, t) {
   let drain = .1 + dark * (on ? .35 : .8);
   for (const e of entities) { const d = Math.hypot(e.x - player.x, e.z - player.z); if (d < 10) drain += (10 - d) * .18; }
   player.san -= drain * dt;
+  if (L.prologo) player.san = player.bat = 100; // o prólogo não cobra nada
   if (player.san <= 0) die();
 
   const ci = Math.floor(player.x / L.C), cj = Math.floor(player.z / L.C), key = ck(ci, cj);
@@ -2311,7 +2560,7 @@ function updatePlayer(dt, t) {
   const nm = rm ? ROOM_NAMES[rm.type] : ROOM_NAMES[lay.sub] ? ROOM_NAMES[lay.sub] : lay.sub === 'praca' ? 'pátio' : lay.sub === 'rosas' ? 'roseiral' : lay.centro ? 'labirinto da torre' : 'labirinto de sebes';
   if (nm !== placeName) { placeName = nm; if (levelT > 1.5) showMsg(nm, 1.8); }
   const rk = rm ? roomKey(Math.floor(ci / CH), Math.floor(cj / CH), rm) : null;
-  if (rk !== curRoom) { if (curRoom) roomLeft(curRoom); curRoom = rk; if (rk && levelT > 1 && Math.random() < .1) startRoomFlicker(rk); }
+  if (rk !== curRoom && !L.prologo) { if (curRoom) roomLeft(curRoom); curRoom = rk; if (rk && levelT > 1 && Math.random() < .1) startRoomFlicker(rk); }
   if (rk && burning.has(rk)) { player.san -= 3 * dt; if (!msg) showMsg('a sala está pegando fogo'); } // o calor corrói
   for (const ch of chunks.values()) for (let k = ch.items.length - 1; k >= 0; k--) {
     const it = ch.items[k]; if (Math.hypot(it.x - player.x, it.z - player.z) > .75) continue;
@@ -2338,6 +2587,14 @@ function updatePlayer(dt, t) {
     if (!msg || msg.s !== '[E] pegar café') showMsg('[E] pegar café', .3);
     if (keys.has('KeyE')) { keys.delete('KeyE'); collected.add(mq.key); player.cafe = 100; player.copo = false; player.sipT = .8; drips.push({ x: mq.x, z: mq.z, t: 6, next: 0 }); showMsg('café quente'); noiseBurst(.6, 900, .8, .12); blip(420, 620, .15, .08, 'triangle'); }
   }
+  if (lanternaItem && Math.hypot(lanternaItem.x - player.x, lanternaItem.z - player.z) < .9) { darLanterna(); showMsg('uma lanterna', 4); blip(300, 600, .12, .12); }
+  // alavanca: [E] abre o portão da sala, mas o rangido se ouve longe
+  let alav = null, alavCh = null;
+  for (const ch of chunks.values()) for (const a of ch.levers) if (Math.hypot(a.x - player.x, a.z - player.z) < 1.1) { alav = a; alavCh = ch; }
+  if (alav) {
+    if (!msg || msg.s !== '[E] puxar a alavanca') showMsg('[E] puxar a alavanca', .3);
+    if (keys.has('KeyE')) { keys.delete('KeyE'); collected.add(alav.key); rebuildChunk(alavCh); showMsg('o portão abriu'); makeNoise(player.x, player.z, 14); blip(120, 70, .5, .18, 'sawtooth'); noiseBurst(.6, 300, 1.5, .2, 'lowpass'); return; }
+  } else if (!msg) for (const ch of chunks.values()) for (const q of ch.portoes) if (Math.hypot(q.x - player.x, q.z - player.z) < 1.5) showMsg('trancado', 1.2);
   const ex = exitGrp.position.x, ez = exitGrp.position.z, de = Math.hypot(ex - player.x, ez - player.z);
   if (de < 14) exitSeen = true;
   if (de < 1.4) { if (!msg || msg.s !== '[E] atravessar a porta') showMsg('[E] atravessar a porta', .3); if (keys.has('KeyE')) { keys.delete('KeyE'); goDeeper(); } }
@@ -2359,8 +2616,11 @@ function sitDown(c) {
 function standUp() {
   const c = player.seat; if (!c) return;
   c.taken = null; player.seat = null; player.ignored = false;
-  const nx = player.x + Math.sin(player.face) * .55, nz = player.z + Math.cos(player.face) * .55;
-  if (isFree(nx, nz, .3)) { player.x = nx; player.z = nz; }
+  const fx = Math.sin(player.face), fz = Math.cos(player.face);
+  for (const [a, b] of [[.55, 0], [-.8, 0], [0, .8], [0, -.8]]) { // para a frente; com a mesa na frente, por trás ou pelos lados da cadeira
+    const nx = player.x + fx * a + fz * b, nz = player.z + fz * a - fx * b;
+    if (isFree(nx, nz, .3)) { player.x = nx; player.z = nz; break; }
+  }
 }
 function goDeeper() { game = 'trans'; fadeT = 0; glitch = 1.2; sfxGlitch(); blip(80, 40, 1.4, .2, 'sawtooth'); }
 function die() {
@@ -2568,6 +2828,10 @@ function updateEntities(dt, t) {
     // ronda → escuta (parada, ao ouvir) → investiga (corre ao ponto do som) → busca (vaga em volta) → ronda; a luz leva a foge
     e.hearT -= dt;
     if (e.hearT <= 0) { e.hearT = .5; if (e.state !== 'foge' && breathHeard(e)) { hear(e, player.x, player.z); if (breathWaveT <= 0) { breathWaveT = 2; addWave(player.x, player.z, 2.2); } } }
+    if (cat && cat.on) { // o gato é um ponto seguro: quem chega perto recua
+      const cd = Math.hypot(e.x - cat.x, e.z - cat.z);
+      if (cd < CAT_SAFE) { const q = CAT_SAFE / Math.max(cd, .01); e.x = cat.x + (e.x - cat.x) * q; e.z = cat.z + (e.z - cat.z) * q; if (e.state !== 'foge') flee(e); }
+    }
     if (e.state === 'escuta' && (e.stateT -= dt) <= 0) e.state = 'investiga';
     if ((e.state === 'busca' || e.state === 'foge') && (e.stateT -= dt) <= 0) { e.state = 'ronda'; e.path = []; }
     e.hunt = e.state === 'investiga' || e.state === 'foge';
@@ -2681,7 +2945,10 @@ function placeWoman() {
   const opts = [];
   for (const ch of chunks.values()) for (const c of ch.chairs) { const d = Math.hypot(c.x - player.x, c.z - player.z); if (d > 7 && d < 34 && !c.taken && !c.special) opts.push(c); }
   if (!opts.length) return;
-  const c = opts[Math.floor(Math.random() * opts.length)], rig = buildCreature('mulher');
+  seatWoman(opts[Math.floor(Math.random() * opts.length)]);
+}
+function seatWoman(c) {
+  const rig = buildCreature('mulher');
   woman = { rig, anim: new Animator(rig), x: c.x, z: c.z, face: c.yaw ?? Math.atan2(0, -c.face), met: false, puffT: 0 };
   c.taken = woman;
   rig.root.position.set(c.x, .54 - rig.hipsBase, c.z); rig.root.rotation.y = woman.face; scene.add(rig.root);
@@ -2833,7 +3100,7 @@ function startRoomFlicker(key) {
 }
 function updateRoomFlicker(dt, t) {
   if (roomFlick && (roomFlick.t -= dt) <= 0) roomFlick = null;
-  if (!roomFlick) { CUT.uDimK.value = 0; return; }
+  if (!roomFlick) { if (!L.prologo) CUT.uDimK.value = 0; return; } // no prólogo, quem manda na luz é o apagão
   const a = h3(Math.floor(t * 14), 7, 91), b = h3(Math.floor(t * 2.5), 9, 92);
   CUT.uDimK.value = b < .3 ? (a < .2 ? 0 : .92) : (a < .35 ? .92 : a < .45 ? .5 : 0);
   if (CUT.uDimK.value > .5 && Math.random() < dt * 8) noiseBurst(.05, 3000, 2, .03);
@@ -2899,7 +3166,8 @@ function updateBalloons(dt, t) {
 
 // --- o gato: raro — só aparece em CAT_CHANCE dos níveis, longe, e se ficar para trás quase nunca volta;
 //     anda solto de célula em célula, às vezes senta; encontrá-lo restaura a sanidade ---
-const CAT_CHANCE = .3, CAT_BACK = .2;
+const CAT_CHANCE = .3, CAT_BACK = .2, CAT_SAFE = 6; // CAT_SAFE: nenhuma entidade entra nesse raio em volta do gato
+const nearCat = () => !!cat && cat.on && Math.hypot(cat.x - player.x, cat.z - player.z) < CAT_SAFE;
 function hideCat() { cat.on = false; cat.x = cat.z = 1e6; cat.rig.root.visible = false; } // longe de tudo: rosas e balões o ignoram
 function placeCat(chance = CAT_CHANCE) {
   if (!cat) { const r0 = Math.random(); cat = { rig: buildCat(r0 < .5 ? .3 : .4, r0 < .5 ? 'AZ' : 'AC') }; cat.rig.root.scale.setScalar(1.35); scene.add(cat.rig.root); } // um pouco maior que o real, para ler no quadro de 256 px
@@ -2949,8 +3217,14 @@ function updateCat(dt, t) {
   c.head.rotation.y = moving ? 0 : Math.sin(t * .6 + cat.face) * .6;
   c.tail.rotation.y = Math.sin(t * (moving ? 3 : 1.4)) * .4;
   c.root.position.set(cat.x, 0, cat.z); c.root.rotation.y = cat.face;
-  if (d < 3 && !cat.met) { cat.met = true; player.san = 100; showMsg('um gato — a sanidade volta'); meow(); makeNoise(cat.x, cat.z, 14); flash = .2; }
-  cat.meowT -= dt; if (cat.meowT <= 0) { cat.meowT = 8 + Math.random() * 14; if (d < 10) meow(); makeNoise(cat.x, cat.z, 14); } // o miado atrai a criatura, ouvindo ou não
+  if (d < 3 && !cat.met) { cat.met = true; player.san = 100; showMsg('um gato — a sanidade volta'); meow(); flash = .2; }
+  cat.meowT -= dt; if (cat.meowT <= 0) { cat.meowT = 8 + Math.random() * 14; if (d < 10) meow(); }
+  if (d < CAT_SAFE && !player.dead) player.san = Math.min(100, player.san + dt * (d < 2 ? 8 : 4)); // ficar perto acalma
+  cat.petT = Math.max(0, (cat.petT || 0) - dt);
+  if (d < 1.3 && cat.petT <= 0 && game === 'play') { // [E] acariciar: ele para um pouco
+    if (!msg || msg.s !== '[E] acariciar') showMsg('[E] acariciar', .3);
+    if (keys.has('KeyE')) { keys.delete('KeyE'); cat.petT = 12; cat.sit = 4; player.san = Math.min(100, player.san + 25); flash = .12; meow(); showMsg('ronronou'); noiseBurst(1.1, 90, 1, .1, 'lowpass'); }
+  }
 }
 function updateItems(t) { for (const ch of chunks.values()) for (const it of ch.items) it.mesh.position.y = .35 + Math.sin(t * 2 + it.ph) * .08; }
 
@@ -3042,7 +3316,7 @@ let windT = 0;
 function audioUpdate(dt) {
   if (!AC) return; const now = AC.currentTime, playing = game === 'play' || game === 'note' || game === 'map' || game === 'help' || game === 'levels';
   const out = kindAt(player.x, player.z) === 'out';
-  AU.hum.gain.setTargetAtTime((playing || game === 'title') && !out ? clamp(lightCache, 0, 1) * .05 + flickNear * .05 : 0, now, .08);
+  AU.hum.gain.setTargetAtTime(playing && !out && !(L.prologo && PRO.fechado) ? clamp(lightCache, 0, 1) * .05 + flickNear * .05 : 0, now, .08);
   windT += dt; AU.windF.frequency.setTargetAtTime(300 + Math.sin(windT * .3) * 120, now, .5);
   AU.wind.gain.setTargetAtTime(playing && out ? .05 + Math.sin(windT * .7) * .02 : 0, now, .4);
   let near = 0; for (const e of entities) near = Math.max(near, 1 - Math.hypot(e.x - player.x, e.z - player.z) / 18);
@@ -3144,10 +3418,15 @@ const ITEM_ICON = { agua: 'almond_water', pilha: 'battery', nota: 'note' };
 const itemCol = type => { const P = T.paleta, n = P.length; return type === 'agua' ? P[Math.round((n - 1) * .7)] : type === 'nota' || type === 'cafe' ? P[Math.max(0, n - 2)] : P[n - 1]; };
 // a cena e a UI passam pela mesma curvatura do CRT, então a projeção da câmera cai direto no canvas de 512
 const toUI = v => [(v.x * .5 + .5) * 512, (.5 - v.y * .5) * 512];
-function worldIcon(it, y, name, col, dt) {
+function worldIcon(it, y, name, col, dt, lanterna = false) {
   const d = Math.hypot(it.x - player.x, it.z - player.z);
   const see = d < 22 && (d < 2 || !segBlocked(player.x, player.z, it.x, it.z));   // parede esconde o ícone
-  it.vis += ((see ? 1 : 0) - it.vis) * Math.min(1, dt * 6);
+  let alvo = see ? 1 : 0;
+  if (lanterna && see) { // lanterna = true: só aparece no cone da luz. O único item visível sem ela é a própria lanterna
+    const lit = player.lanterna && player.bat > 0 && d < 11 && ((it.x - player.x) * aimX + (it.z - player.z) * aimZ) / Math.max(d, 1e-3) > Math.cos(.46);
+    alvo = lit ? 1 : 0;
+  }
+  it.vis += (alvo - it.vis) * Math.min(1, dt * 6);
   if (it.vis < .02) return;
   _iv.set(it.x, 0, it.z).project(camera); if (_iv.z > 1 || Math.abs(_iv.x) > 1.05 || Math.abs(_iv.y) > 1.05) return;
   _iv.set(it.x, y, it.z).project(camera);
@@ -3157,9 +3436,11 @@ function worldIcon(it, y, name, col, dt) {
   g.globalAlpha = 1;
 }
 function drawItems(dt, t) {
+  if (lanternaItem) worldIcon(lanternaItem, .8 + Math.sin(t * 2) * .08, 'flashlight', Z.cream, dt); // esta não precisa de luz para ser vista
   for (const ch of chunks.values()) {
-    for (const it of ch.items) worldIcon(it, it.mesh.position.y + .25, ITEM_ICON[it.type], itemCol(it.type), dt);
-    for (const m of ch.machines) if (!collected.has(m.key)) worldIcon(m, 2.1 + Math.sin(t * 2 + m.x) * .08, 'coffee', itemCol('cafe'), dt); // máquinas que ainda servem
+    for (const it of ch.items) worldIcon(it, it.mesh.position.y + .25, ITEM_ICON[it.type], itemCol(it.type), dt, true);
+    for (const a of ch.levers) worldIcon(a, 1.45, 'gear', Z.cream, dt, true);
+    for (const m of ch.machines) if (!collected.has(m.key)) worldIcon(m, 2.1 + Math.sin(t * 2 + m.x) * .08, 'coffee', itemCol('cafe'), dt, true); // máquinas que ainda servem
   }
   for (const ch of chunks.values()) for (const tw of ch.towers) if (!collected.has(tw.key)) worldIcon(tw, 2.2, 'eye', Z.cream, dt); // torre ainda não escalada
   if (phone) worldIcon(phone, 1.6 + Math.sin(t * 16) * .06, 'phone', Z.cream, dt);
@@ -3183,7 +3464,7 @@ function drawRec(t) {
 function drawStatus() {
   const row = (Y, ic, v, low) => { icon(g, ic, 24, Y - 4, 1.6); meter(38, Y - 3, 120, v, low); };
   row(440, 'sanity', player.san / 100, player.san < 30);
-  row(458, 'flashlight', player.bat / 100, player.bat < 15);
+  if (player.temLanterna) row(458, 'flashlight', player.bat / 100, player.bat < 15); else icon(g, 'flashlight', 24, 454, 1.6, DIM, false); // ainda não achou
   if (player.batK < 1) txt(g, '×5', 164, 461.5, 'm', 9); // a pilha da mulher do canto
   row(476, 'breath', player.stam / 100, player.stamLock > 0);
   const has = player.cafe > 0 || player.copo; // o copo: aceso enquanto está na mão; vazio, dá para jogar
@@ -3192,8 +3473,10 @@ function drawStatus() {
 function drawResources(t) {
   for (let k = 0; k < 3; k++) icon(g, 'almond_water', 488 - 8 - (2 - k) * 12, 436, 1.6, k < player.agua ? Z.cream : DIM, k < player.agua);
   icon(g, 'map', 434, 454, 1.6); txt(g, `${stats.salas}`, 488, 461.5, 'm', 11, Z.cream, { align: 'right' });
-  const de = Math.hypot(exitGrp.position.x - player.x, exitGrp.position.z - player.z), sig = Math.round(sstep(140, 6, de) * 6);
-  const on = !(sig >= 5 && Math.floor(t * 3) % 2);
+  drawSinal(t, Math.hypot(exitGrp.position.x - player.x, exitGrp.position.z - player.z));
+}
+function drawSinal(t, de) {
+  const sig = Math.round(sstep(140, 6, de) * 6), on = !(sig >= 5 && Math.floor(t * 3) % 2);
   icon(g, 'signal', 434, 472, 1.6, on ? Z.cream : DIM); chevrons(g, 452, 476, 6, sig);
 }
 function drawCrosshair() {
@@ -3208,7 +3491,15 @@ const toastMemo = new Map();
 function toastSpec(s) {
   if (toastMemo.has(s)) return toastMemo.get(s);
   let sp = null;
-  if (/^\[E\] pegar café/.test(s)) sp = { key: 'E', title: 'PEGAR CAFÉ' };
+  if (/^\[E\] entregar/.test(s)) sp = { key: 'E', title: 'ENTREGAR A CARTA' };
+  else if (/^uma lanterna/.test(s)) sp = { ic: 'flashlight', title: 'LANTERNA', key: 'F' };
+  else if (/^sem lanterna/.test(s)) sp = { ic: 'flashlight', title: 'SEM LANTERNA', off: true };
+  else if (/^\[E\] puxar/.test(s)) sp = { key: 'E', title: 'PUXAR A ALAVANCA' };
+  else if (/^o portão abriu/.test(s)) sp = { ic: 'door', title: 'PORTÃO ABERTO' };
+  else if (/^trancado/.test(s)) sp = { ic: 'door', title: 'TRANCADO: ACHE A ALAVANCA', off: true };
+  else if (/^\[E\] acariciar/.test(s)) sp = { key: 'E', title: 'ACARICIAR' };
+  else if (/^ronronou/.test(s)) sp = { ic: 'cat', title: '+ SANIDADE' };
+  else if (/^\[E\] pegar café/.test(s)) sp = { key: 'E', title: 'PEGAR CAFÉ' };
   else if (/^\[E\] sentar/.test(s)) sp = { key: 'E', title: 'SENTAR' };
   else if (/^\[E\] atender/.test(s)) sp = { key: 'E', title: 'ATENDER' };
   else if (/^\[E\] subir/.test(s)) sp = { key: 'E', title: 'SUBIR NA TORRE' };
@@ -3247,6 +3538,12 @@ function drawToast(sp, Y) {
   txt(g, sp.title, X + lead, Y + 1.5, 'm', 11, sp.off ? Z.greyL : Z.cream);
   if (tail) keycap(g, sp.key, X + lead + tw + 6, Y - 10);
 }
+function drawMsg(dt, Y = 392) {
+  if (!msg) return;
+  msg.t -= dt; const sp = toastSpec(msg.s);
+  if (sp) { g.globalAlpha = clamp(msg.t * 2, 0, 1); drawToast(sp, Y); g.globalAlpha = 1; }
+  if (msg.t <= 0) msg = null;
+}
 function drawHUD(dt, t) {
   if (game !== 'end') drawItems(dt, t);
   drawLevelTag(); drawRec(t); drawStatus(); drawResources(t);
@@ -3260,15 +3557,12 @@ function drawHUD(dt, t) {
     if (banner.t <= 0) banner = null;
   }
   let near = 1e9; for (const e of entities) near = Math.min(near, Math.hypot(e.x - player.x, e.z - player.z));
-  if (game === 'play' && near < 9 && Math.floor(t * 4) % 2) {
+  if (game === 'play' && nearCat()) { const tw = measure('m', 10, 'SEGURO'), W = 30 + tw, X = 256 - W / 2; pill(g, X, 52, W, 18, [X + 20]); icon(g, 'cat', X + 6, 57, 1.6); txt(g, 'SEGURO', X + 25, 64.5, 'm', 10); }
+  else if (game === 'play' && near < 9 && Math.floor(t * 4) % 2) {
     const tw = measure('m', 10, 'ENTIDADE'), W = 30 + tw, X = 256 - W / 2;
     pill(g, X, 52, W, 18, [X + 20]); icon(g, 'entity', X + 6, 57, 1.6); txt(g, 'ENTIDADE', X + 25, 64.5, 'm', 10);
   }
-  if (msg) {
-    msg.t -= dt; const sp = toastSpec(msg.s);
-    if (sp) { g.globalAlpha = clamp(msg.t * 2, 0, 1); drawToast(sp, 392); g.globalAlpha = 1; }
-    if (msg.t <= 0) msg = null;
-  }
+  drawMsg(dt);
   if (player.noclipT > 0) meter(216, 410, 80, player.noclipT / .8, false);
   if (player.holding) { icon(g, 'breath', 200, 419, 1.6); meter(216, 420, 80, 1 - player.holdT / player.holdMax, player.holdT > player.holdMax - 2); } // o ar que resta
   drawCrosshair();
@@ -3305,6 +3599,7 @@ function drawMap() {
     const ed = [[edgeState(i, j, 0), x, y, s, 1], [edgeState(i, j + 1, 0), x, y + s - 1, s, 1], [edgeState(i, j, 1), x, y, 1, s], [edgeState(i + 1, j, 1), x + s - 1, y, 1, s]];
     for (const [st, ex, ey, w, h] of ed) if (st === 1) g.fillRect(ex, ey, w, h); else if (st === 2) { if (w > h) { g.fillRect(ex, ey, 2, h); g.fillRect(ex + w - 2, ey, 2, h); } else { g.fillRect(ex, ey, w, 2); g.fillRect(ex, ey + h - 2, w, 2); } }
   }
+  if (L.prologo && PRO.etapa === 'andar') { const x = ox + (PRO.mesa.x / C - pi) * s, y = oy + (PRO.mesa.z / C - pj) * s; icon(g, 'note', x - 4, y - 4, 1.6); txt(g, 'RH', x + 7, y + 3.5, 'm', 10); } // o destino do último dia
   if (exitSeen) { const x = ox + (EXIT.i + .5 - pi) * s, y = oy + (EXIT.j + .5 - pj) * s; icon(g, 'door', x - 4, y - 4, 1.6); }
   if (Math.floor(performance.now() / 300) % 2) { g.fillStyle = Z.cream; g.beginPath(); g.arc(ox, oy, 2.5, 0, 7); g.fill(); }
   g.restore();
@@ -3345,6 +3640,11 @@ function drawLevels() {
   txt(g, 'NÚMERO OU ENTER: ENTRAR    L: VOLTAR', X, 372.5, 'm', 9, Z.greyL, { max: W });
 }
 function drawTitle(t) {
+  // a cena fica limpa; só atrás dos textos entra uma sombra suave
+  for (const [y0, y1, a] of [[120, 305, .72], [390, 470, .62]]) {
+    const gr = g.createLinearGradient(0, y0, 0, y1); gr.addColorStop(0, 'rgba(30,28,30,0)'); gr.addColorStop(.25, `rgba(30,28,30,${a})`); gr.addColorStop(.75, `rgba(30,28,30,${a})`); gr.addColorStop(1, 'rgba(30,28,30,0)');
+    g.fillStyle = gr; g.fillRect(0, y0, 512, y1 - y0);
+  }
   triMark(g, 256, 156, 44);                                                   // logo e frase 30% maiores
   const logo = T.titulo.toUpperCase();
   txt(g, logo, 256, 216, 'd', 28.6, Z.cream, { align: 'center', max: 400 }); // nome longo: estreita em vez de vazar do quadro
@@ -3376,17 +3676,473 @@ function drawEnd(dt, t) {
 }
 
 /* =====================================================================
+   PRÓLOGO: o último dia. O narrador, a carta ao RH, o carimbo, o apagão e a parede que leva ao Nível 0.
+   Roda como um nível (n = -1) com game = 'play'; PRO.etapa: sentado → andar (a narração corre nas duas) → carta → carimbo → apagao → preso
+   ===================================================================== */
+const PRO_SEED = 1996;
+const NARRACAO = [
+  'Eu havia ensaiado esse dia na minha cabeça de várias maneiras.',
+  'Eu não tenho dúvida de o quanto eu odeio esse lugar.',
+  'Mas estou tanto tempo trabalhando aqui que já não sei mais quem eu serei quando sair daqui.',
+  'É estranho pensar nisso.',
+  'Passei anos querendo ir embora, mas agora que finalmente tomei a decisão, tenho medo.',
+  'Não sei exatamente do quê.',
+  'Todos os dias são praticamente iguais.',
+  'As mesmas pessoas, os mesmos corredores, as mesmas conversas.',
+  'Às vezes tenho a impressão de que passei boa parte da minha vida esperando o expediente terminar.',
+  'Mas hoje vai ser diferente.',
+  'Hoje eu vou entregar meu pedido de demissão.',
+];
+const FALAS = ['Boa sorte lá fora.', 'Até segunda.', 'Você volta.', 'Já vai tarde.'];
+const PRO = { etapa: 'sentado', trava: false, fechado: false, closeK: 1, t: 0, pag: 0, linhas: [], plano: '', n: 0, espera: 0, hold: 0, t0: 0, pularT: 0, fala: null, falaN: 0, teclaT: 0, mesa: null, cast: [], props: null, carta: null, rota: new Map() };
+function narraPagina() { // quebra as linhas uma vez: as palavras não pulam de linha enquanto surgem
+  PRO.linhas = wrapText(NARRACAO[PRO.pag], 376, 'm', 13); PRO.plano = PRO.linhas.join(''); PRO.n = 0; PRO.espera = .25; PRO.hold = 1.1 + PRO.plano.length * .02;
+}
+const narrou = () => PRO.pag >= NARRACAO.length;
+function narraProxima() { if (++PRO.pag < NARRACAO.length) narraPagina(); }
+function narraAvanca() { // ENTER: completa a página; completa, passa para a próxima
+  if (PRO.n < PRO.plano.length) PRO.n = PRO.plano.length; else narraProxima();
+}
+function updateNarra(dt) { // uma frase por vez; corre sozinha enquanto ele anda. Sentado, espera depois da 3ª, para o resto vir na caminhada
+  if (narrou()) return;
+  PRO.espera -= dt;
+  while (PRO.espera <= 0 && PRO.n < PRO.plano.length) {
+    const c = PRO.plano[PRO.n++]; PRO.espera += c === '.' ? .4 : c === ',' ? .2 : .03;
+    if (c !== ' ' && PRO.n % 3 === 0) blip(190, 170, .03, .012);
+  }
+  if (PRO.n < PRO.plano.length || (player.seat && PRO.etapa === 'sentado' && PRO.pag >= 2)) return;
+  if ((PRO.hold -= dt * (pertoDaMesa() ? 3 : 1)) <= 0) narraProxima(); // chegou ao RH antes do fim: o texto apressa
+}
+function montarRota() { // distância de cada célula da planta até a mesa do RH, para o SINAL (bfsPath não alcança o U inteiro)
+  const C = L.C, gi = Math.floor(PRO.mesa.x / C), gj = Math.floor(PRO.mesa.z / C), q = [[gi, gj]];
+  PRO.rota = new Map([[ck(gi, gj), 0]]);
+  for (let head = 0; head < q.length; head++) {
+    const [i, j] = q[head], d = PRO.rota.get(ck(i, j));
+    for (const [a, b] of cellNbrs(i, j)) if (a >= 0 && b >= 0 && a < 3 * CH && b < 2 * CH && !PRO.rota.has(ck(a, b))) { PRO.rota.set(ck(a, b), d + 1); q.push([a, b]); }
+  }
+}
+function typingPose(rig, t, ph) { // mãos no teclado, batendo em alternância
+  const k = Math.sin(t * 15 + ph), q = Math.sin(t * 11 + ph * 2);
+  rig.j.arm_R.o.rotation.set(-38 * D2R, 13 * D2R, 0); rig.j.fore_R.o.rotation.x = (-67 - Math.max(0, k) * 6) * D2R;
+  rig.j.arm_L.o.rotation.set(-38 * D2R, -13 * D2R, 0); rig.j.fore_L.o.rotation.x = (-67 - Math.max(0, q) * 6) * D2R;
+  rig.j.spine.o.rotation.x = 12 * D2R; rig.j.head.o.rotation.x = 8 * D2R; // inclinado para a tela
+}
+/* o jogador digitando: IK de 2 ossos leva cada pulso até o teclado real da mesa (PRO.heroi) e a mão deita sobre as teclas.
+   Ele escorrega para a frente na cadeira e inclina o tronco, porque os braços da malha não alcançam a mesa do fundo do assento */
+function teclar(rig, t, face) {
+  const { X, Z, T0 } = PRO.heroi, Vec = (x, y, z) => new THREE.Vector3(x, y, z), EIXO_X = Vec(1, 0, 0);
+  rig.root.position.x += Math.sin(face) * .1; rig.root.position.z += Math.cos(face) * .1;
+  rig.j.spine.o.rotation.x = 16 * D2R; rig.j.head.o.rotation.x = -5 * D2R; // inclinado, olhando para a tela
+  rig.root.updateWorldMatrix(true, false);
+  const centro = rig.root.worldToLocal(Vec(X, T0 + .024, Z - .21)); // o meio do teclado, no espaço do corpo
+  const corpoInv = rig.root.getWorldQuaternion(new THREE.Quaternion()).invert();
+  // rajadas: digita, pausa um instante e volta; cada mão bate no seu ritmo e passeia entre as teclas
+  const ritmo = clamp((Math.sin(t * .9) + Math.sin(t * .37 + 1) + .9) * 3, 0, 1);
+  for (const side of ['L', 'R']) {
+    const h = rig.maos[side], s = h.s, ph = s > 0 ? 0 : 2.1;
+    const bate = ritmo * Math.max(0, Math.sin(t * (s > 0 ? 15 : 17.5) + ph) * Math.sin(t * 3.1 + ph * 2)) ** .6;
+    const dedos = Vec(-s * .12, -.2, 1).normalize(); // para a frente, um pouco para dentro e para baixo
+    const alvo = centro.clone().add(Vec(s * .115 + ritmo * (.03 * Math.sin(t * 2.3 + ph) + .012 * Math.sin(t * 5.7 + ph)), .05 + .018 * (1 - bate), ritmo * .022 * Math.sin(t * 1.9 + ph * 3)));
+    alvo.addScaledVector(dedos, -h.comp); rig.root.localToWorld(alvo); // o pulso fica recuado do centro da mão
+    // no espaço do ombro: gira o braço para o pulso cair no alvo, com o cotovelo para fora e para baixo
+    h.arm.parent.updateWorldMatrix(true, false); h.arm.parent.worldToLocal(alvo);
+    const dist = Math.min(alvo.length(), h.upper + h.antebraco - .002);
+    const dobra = Math.PI - Math.acos(clamp((h.upper ** 2 + h.antebraco ** 2 - dist ** 2) / (2 * h.upper * h.antebraco), -1, 1));
+    const base = (dir, polo) => { polo.addScaledVector(dir, -polo.dot(dir)).normalize(); return new THREE.Matrix4().makeBasis(dir, polo, dir.clone().cross(polo)); };
+    const repouso = base(Vec(0, -h.upper - h.antebraco * Math.cos(dobra), h.antebraco * Math.sin(dobra)).normalize(), Vec(0, -1, 0));
+    h.arm.quaternion.setFromRotationMatrix(base(alvo.normalize(), Vec(s * .6, -1, -.25)).multiply(repouso.transpose()));
+    h.fore.rotation.set(-dobra, 0, 0);
+    // a mão: da orientação da malha para palma para baixo; a batida inclina os dedos sobre a tecla
+    const noCorpo = new THREE.Quaternion().setFromRotationMatrix(base(dedos, Vec(0, -1, 0)).multiply(h.malha)).premultiply(new THREE.Quaternion().setFromAxisAngle(EIXO_X, bate * 14 * D2R)).multiply(h.rotBind);
+    h.fore.updateWorldMatrix(true, false);
+    h.mo.quaternion.copy(h.fore.getWorldQuaternion(new THREE.Quaternion()).premultiply(corpoInv).invert().multiply(noCorpo));
+  }
+}
+function seatCast(c, fala, digita) { // colega sentado: o mesmo boneco do andarilho, sem a lanterna
+  const rig = buildHumanoid(.16), e = { rig, anim: new Animator(rig), x: c.x, z: c.z, fala, dita: false, digita, ph: Math.random() * 6 }; rig.lamp.visible = false; c.taken = e;
+  rig.root.position.set(c.x, .54 - rig.hipsBase, c.z); rig.root.rotation.y = c.yaw ?? Math.atan2(0, -c.face); scene.add(rig.root);
+  e.anim.t = Math.random() * 3; e.anim.play('Sit_Idle'); PRO.cast.push(e);
+}
+function removeColegas() {
+  for (const e of PRO.cast) scene.remove(e.rig.root); PRO.cast.length = 0;
+  if (PRO.props) { scene.remove(PRO.props); PRO.props = null; }
+}
+function removeCast() {
+  removeColegas();
+  if (woman) { scene.remove(woman.rig.root); woman = null; }
+}
+function povoar(ch) { // cada bloco ganha a sua gente quando é construído
+  ch.povoado = true;
+  if (PRO.fechado) { const c = ch.chairs.find(c => c.rh); if (c && woman) c.taken = woman; return; } // o bloco do RH refeito no apagão: ela continua na cadeira
+  ch.chairs.forEach((c, k) => {
+    if (c.taken) return;
+    if (c.rh) { seatWoman(c); woman.met = true; } // a atendente é a mulher fumando
+    else if (k % 3 === 0 && PRO.cast.length < 44) { const rm = roomAt(Math.floor(c.x / L.C), Math.floor(c.z / L.C)), mesa = rm && rm.type === 'escritorio'; seatCast(c, mesa ? FALAS[PRO.falaN++ % FALAS.length] : undefined, mesa); }
+  });
+}
+function montarMesa() { // o que muda na mesa dele: a tela acesa do terminal e a carta pronta (sai quando ele levanta)
+  const { X, Z, T0 } = PRO.heroi, grp = new THREE.Group(), tela = new THREE.Group();
+  const plane = (w, h, x, y, v, c, dz = 0) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: ctone(v, c) })); m.position.set(x, y, .022 + dz); tela.add(m); };
+  plane(.46, .31, 0, 0, 1.1, 'CL'); plane(.46, .035, 0, .138, .55, 'CY', .001); plane(.11, .27, -.17, -.02, .75, 'CY', .001); // janela, barra e painel de pastas
+  for (let k = 0; k < 5; k++) { const w = .18 + (k * 37 % 5) * .025; plane(w, .016, -.09 + w / 2, .085 - k * .045, .35, 'N', .002); } // linhas de texto
+  tela.position.set(X - .2, T0 + .275, Z - .56); tela.rotation.y = PRO_MONITOR_YAW; grp.add(tela);
+  const carta = new THREE.Mesh(new THREE.BoxGeometry(.3, .012, .2), new THREE.MeshBasicMaterial({ color: ctone(1.3, 'CL') })); carta.position.set(X - .46, T0 + .012, Z - .34); carta.rotation.y = .28; grp.add(carta); PRO.carta = carta;
+  scene.add(grp); PRO.props = grp;
+}
+function montarElenco() { // ele senta de frente para o terminal; a câmera fica atrás, sobre o ombro esquerdo
+  const meu = chunks.get('0,0').chairs.find(c => c.heroi);
+  player.seat = meu; meu.taken = player; player.x = meu.x; player.z = meu.z; player.face = meu.yaw ?? Math.atan2(0, -meu.face);
+  montarMesa(); camTarget.set(player.x, 1, player.z);
+}
+function startPrologo() {
+  resetRun();
+  Object.assign(PRO, { etapa: 'sentado', trava: false, fechado: false, closeK: 1, t: 0, t0: 0, pularT: 0, pag: 0, fala: null, falaN: 0 });
+  CUT.uDimK.value = 0; startLevel(-1); montarElenco(); montarRota(); narraPagina(); PRO.espera = 2.2; game = 'play'; // um instante só com a imagem, antes da primeira letra
+}
+const pertoDaMesa = () => !!PRO.mesa && Math.hypot(PRO.mesa.x - player.x, PRO.mesa.z - player.z) < 2;
+function prologoKey(e) { // true: a tecla foi consumida pelo prólogo
+  const c = e.code;
+  if (c === 'Escape' || (c === 'KeyH' && !e.isTrusted)) { // ESC, ou o botão ? no celular: pede confirmação, para não pular sem querer
+    if (!e.repeat) { if (PRO.pularT > 0) goDeeper(); else PRO.pularT = 3; }
+    return true;
+  }
+  if (c === 'KeyH') return PRO.trava;
+  if (['KeyL', 'KeyR', 'KeyG'].includes(c)) return true;
+  if (c === 'KeyM') return PRO.trava; // o mapa só não abre na cena do carimbo e do apagão
+  if (c === 'KeyF') return true; // a lanterna só existe a partir do Nível 0
+  if (c === 'KeyE' && PRO.etapa === 'andar' && narrou() && pertoDaMesa()) { // no próprio evento: um toque curto não se perde entre quadros
+    keys.delete(c); if (e.repeat) return true;
+    PRO.etapa = 'carta'; PRO.trava = true; player.anim.play('Idle_Neutral'); blip(200, 160, .3, .1, 'triangle');
+    return true;
+  }
+  if (c === 'Enter' && !PRO.trava && !narrou()) { if (!e.repeat) narraAvanca(); return true; }
+  if (!PRO.trava || !['Enter', 'Space', 'KeyE'].includes(c)) return false;
+  keys.delete(c); if (e.repeat) return true;
+  if (PRO.etapa === 'carta') { PRO.etapa = 'carimbo'; PRO.t = 0; flash = .35; shake = .5; noiseBurst(.18, 180, 1, .45, 'lowpass'); blip(90, 50, .22, .25); }
+  return true;
+}
+function updatePrologo(dt, t) {
+  for (const ch of chunks.values()) if (!ch.povoado) povoar(ch);
+  for (const e of PRO.cast) { // só quem está por perto se mexe: são muitos
+    const perto = Math.hypot(e.x - player.x, e.z - player.z) < 26; e.rig.root.visible = perto; if (!perto) continue;
+    e.anim.update(dt); if (e.digita) typingPose(e.rig, t, e.ph);
+  }
+  PRO.t0 += dt;
+  PRO.closeK += ((PRO.etapa === 'sentado' ? 1 : 0) - PRO.closeK) * Math.min(1, dt * 1.4);
+  if (game !== 'play') return;
+  PRO.pularT = Math.max(0, PRO.pularT - dt);
+  if (PRO.fala && (PRO.fala.t -= dt) <= 0) PRO.fala = null;
+  if (!PRO.fechado && PRO.etapa !== 'apagao' && (PRO.teclaT -= dt) <= 0) { PRO.teclaT = R(.08, .55); noiseBurst(.03, R(2500, 4500), 3, .012); } // alguém sempre digita
+  updateNarra(dt);
+  if (PRO.etapa === 'preso' && woman) { // ela não some na frente de ninguém: só quando sai da tela
+    _iv.set(woman.x, 1, woman.z).project(camera);
+    if (Math.abs(_iv.x) > 1.02 || Math.abs(_iv.y) > 1.02) { scene.remove(woman.rig.root); woman = null; }
+  }
+  if (PRO.etapa === 'sentado') { if (!player.seat) { PRO.etapa = 'andar'; if (PRO.carta) PRO.carta.visible = false; prig.j.arm_R.o.rotation.y = prig.j.arm_L.o.rotation.y = 0; blip(180, 120, .12, .06, 'triangle'); } } // levantou e pegou a carta
+  else if (PRO.etapa === 'andar') {
+    for (const e of PRO.cast) if (e.fala && !e.dita && Math.hypot(e.x - player.x, e.z - player.z) < 1.8) { e.dita = true; PRO.fala = { s: e.fala, t: 2.6 }; }
+    if (narrou() && pertoDaMesa() && (!msg || msg.s !== '[E] entregar a carta')) showMsg('[E] entregar a carta', .3);
+  } else if (PRO.etapa === 'carimbo' && (PRO.t += dt) > 3.8) { PRO.etapa = 'apagao'; PRO.t = 0; CUT.uDim.value.set(-99, -99, 99, 99); noiseBurst(.4, 120, 3, .12, 'lowpass'); }
+  else if (PRO.etapa === 'apagao') {
+    PRO.t += dt;
+    if (PRO.t < 2.4) { // as luzes piscam cada vez mais fracas
+      const a = h3(Math.floor(t * 14), 7, 91); CUT.uDimK.value = a < .3 + PRO.t * .3 ? .92 : a < .9 ? .35 : 0;
+      if (CUT.uDimK.value > .5 && Math.random() < dt * 8) noiseBurst(.05, 3000, 2, .03);
+    } else { // no escuro: todos somem e a porta vira parede
+      CUT.uDimK.value = .97; removeColegas(); PRO.fechado = true; clearMemo(); rebuildChunk(chunks.get('0,1'));
+      PRO.etapa = 'preso'; PRO.trava = false; PRO.fala = { s: 'A porta não está mais aqui.', t: 5 };
+      noiseBurst(.5, 90, 1, .35, 'lowpass');
+    }
+  }
+}
+// ---------- telas do prólogo ----------
+function subtitle(s, Y) {
+  const W = measure('m', 12, s) + 24; g.fillStyle = 'rgba(36,36,35,.82)'; rrect(g, 256 - W / 2, Y - 14, W, 20, 5); g.fill();
+  txt(g, s, 256, Y, 'm', 12, Z.cream, { align: 'center', sh: false });
+}
+function drawNarrador() { // baixa e só da altura do texto: ele continua andando por cima dela
+  if (narrou() || !PRO.n) return;
+  const H = PRO.linhas.length * 20 + 12, Y = 478 - H;
+  g.fillStyle = 'rgba(36,36,35,.8)'; rrect(g, 24, Y, 396, H, 7); g.fill(); g.lineWidth = .8; g.strokeStyle = Z.cream; g.stroke();
+  let resto = PRO.n;
+  PRO.linhas.forEach((l, i) => { if (resto > 0) txt(g, l.slice(0, resto), 34, Y + 20 + i * 20, 'm', 13); resto -= l.length; });
+}
+function drawCarta() {
+  dimScreen(.6);
+  const X = 136, Y = 118, W = 240, H = 190, ink = '#331c16';
+  g.fillStyle = '#f1eadb'; g.fillRect(X, Y, W, H);
+  txt(g, 'PEDIDO DE DEMISSÃO', X + 14, Y + 26, 'm', 11, ink, { sh: false }); g.fillStyle = ink; g.fillRect(X + 14, Y + 34, W - 28, .8);
+  wrapText('Venho, por meio desta, solicitar meu desligamento da empresa.', W - 28, 'm', 12).forEach((l, i) => txt(g, l, X + 14, Y + 58 + i * 17, 'm', 12, ink, { sh: false }));
+  txt(g, 'Atenciosamente,', X + 14, Y + 150, 'm', 12, ink, { sh: false });
+  if (PRO.etapa === 'carta') {
+    const kw = keyW('E', 14); keycap(g, 'E', X, Y + H + 12); txt(g, 'ENTREGAR', X + kw + 6, Y + H + 22.5, 'm', 10, Z.greyL);
+    return;
+  }
+  const k = 1 + clamp(1 - PRO.t / .12, 0, 1) * 1.4, red = '#ad0b1e'; // o carimbo desce e bate
+  g.save(); g.translate(256, Y + 112); g.rotate(-.2); g.scale(k, k);
+  g.lineWidth = 2.5; g.strokeStyle = red; g.strokeRect(-92, -24, 184, 42);
+  txt(g, 'RECUSADO', 0, 6, 'd', 21, red, { align: 'center', sh: false }); g.restore();
+  if (PRO.t > .5) subtitle('Seu pedido de demissão foi recusado.', 342);
+  if (PRO.t > 2.1) subtitle('Volte ao trabalho.', 368);
+}
+function drawPrologo(dt, t) {
+  const sentado = PRO.etapa === 'sentado';
+  if (!sentado && !PRO.fechado) { drawItems(dt, t); if (PRO.etapa === 'andar') worldIcon(PRO.mesa, 1.7, 'note', Z.cream, dt); }
+  if (!sentado) drawLevelTag();
+  if (!PRO.fechado) { const W = measure('m', 10, '17:58') + 16; pill(g, 488 - W, 22, W, 18); txt(g, '17:58', 496 - W, 34.5, 'm', 10); }
+  if (PRO.pularT > 0) subtitle('ESC DE NOVO PARA PULAR A INTRO', 100); else txt(g, 'ESC PULAR', 488, 54, 'm', 8.5, Z.greyL, { align: 'right' });
+  if (PRO.etapa === 'andar') { const s = 'LEVE A CARTA AO RH', W = 30 + measure('m', 10, s), X = 256 - W / 2; pill(g, X, 52, W, 18, [X + 20]); icon(g, 'note', X + 6, 57, 1.6); txt(g, s, X + 25, 64.5, 'm', 10); }
+  if (PRO.etapa === 'andar') drawSinal(t, (PRO.rota.get(ck(Math.floor(player.x / L.C), Math.floor(player.z / L.C))) ?? 0) * L.C); // pelo caminho: em linha reta, o U enganaria
+  if (PRO.etapa === 'andar') { keycap(g, 'M', 24, 46); txt(g, 'MAPA', 42, 56.5, 'm', 9, Z.greyL); }
+  if (PRO.etapa === 'sentado' || PRO.etapa === 'andar') drawNarrador();
+  if (sentado && (PRO.pag > 0 || PRO.n >= PRO.plano.length)) { const w = keyW('WASD', 14); keycap(g, 'WASD', 488 - w, 446); txt(g, 'LEVANTAR', 488, 474, 'm', 8.5, Z.cream, { align: 'right' }); } // no canto: não cobre a cena
+  if (PRO.etapa === 'carta' || PRO.etapa === 'carimbo') drawCarta();
+  if (PRO.fala) subtitle(PRO.fala.s, PRO.etapa === 'preso' ? 402 : 350); // no escuro, abaixo dela
+  if (PRO.etapa === 'preso') {
+    const w = keyW('Q', 14), s = 'SEGURE EMPURRANDO A PAREDE', W = w + 6 + measure('m', 10, s), X = 256 - W / 2; keycap(g, 'Q', X, 438); txt(g, s, X + w + 6, 448.5, 'm', 10);
+  }
+  drawMsg(dt, narrou() ? 392 : 368);
+  if (player.noclipT > 0) meter(216, 400, 80, player.noclipT / .8, false);
+  if (!PRO.trava && !sentado) drawCrosshair();
+}
+
+/* =====================================================================
+   CENA DO TÍTULO: o prédio da Zenith visto da rua (referência: pasta "Ui Intro BG") — laje longa sobre pilotis, janelas e
+   painéis azul-petróleo, empena de tijolo, muro claro com o nome, relevo de concreto, gramado, rua, céu e pássaros.
+   Fica longe do escritório, num grupo próprio, e só existe enquanto game === 'title'
+   ===================================================================== */
+/* AVE-INI — o pássaro da abertura (referência: "Ui Intro BG/bird ref", a cacatua em voo de Muybridge): corpo curto e cheio,
+   cabeça redonda com bico e crista, rabo em leque e asa larga de três ossos (braço, antebraço e mão), com secundárias e
+   primárias separadas, que se abrem como dedos. Só a asa e o rabo são refeitos a cada quadro.
+   Cada pose, em graus: dA dF dM = elevação de cada osso (+ para cima), pA pF pM = varredura de cada osso (+ para a frente),
+   giro = bordo de fuga para baixo, leque = abertura das primárias (0 a 1), sobe = corpo em unidades, nariz = cabeça acima
+   da horizontal, rabo = rabo abaixo do corpo, abre = abertura do rabo (0 a 1) */
+const AVE_CICLO = [ // uma batida, na ordem das fotos: a descida é a asa aberta, a subida é a asa dobrada que recolhe a mão
+  [48, 44, 30, -14, -2, -20, 12, .75, -.03, 12, 22, .6],    // no alto, asas para trás (linha 2, foto 1)
+  [24, 20, 10, 2, 8, -8, 6, .9, -.04, 10, 20, .5],        // descendo (linha 2, foto 3)
+  [4, -2, -10, 10, 18, 4, 0, 1, 0, 6, 14, .3],             // na linha do corpo, quase de perfil (linha 1, foto 1)
+  [-16, -22, -32, 2, 4, -18, -6, 1, .05, 4, 10, .35],     // asa cheia e redonda (linha 1, foto 3)
+  [-30, -38, -46, -4, 0, -24, 0, 1, .07, 6, 12, .4],      // no fundo, penas abertas (linha 1, foto 4)
+  [-20, -30, -44, -6, 14, -24, 12, .9, .05, 7, 14, .4],    // o cotovelo sobe primeiro (linha 3, foto 2)
+  [8, 6, -6, -12, 20, -30, 12, .75, .02, 8, 16, .45],    // asa pouco dobrada: dobrar demais lembra um morcego
+  [36, 32, 16, -14, 8, -26, 12, .75, -.01, 10, 20, .5],     // subindo, aberta e para trás (linha 3, foto 4)
+];
+const AVE_PLANA = [14, 10, 2, 6, 10, -4, 2, .9, 0, 4, 8, .4], AVE_POUSO = [-8, -8, -8, -70, 100, -95, 80, 0, 0, 0, 12, 0];
+function avePose(u, o) { // Catmull-Rom em laço, que fecha sozinho
+  const n = AVE_CICLO.length, p = (u - Math.floor(u)) * n, i = Math.floor(p), f = p - i, a = AVE_CICLO[(i + n - 1) % n], b = AVE_CICLO[i], c = AVE_CICLO[(i + 1) % n], d = AVE_CICLO[(i + 2) % n];
+  for (let k = 0; k < 12; k++) o[k] = .5 * (2 * b[k] + (c[k] - a[k]) * f + (2 * a[k] - 5 * b[k] + 4 * c[k] - d[k]) * f * f + (3 * b[k] - a[k] - 3 * c[k] + d[k]) * f * f * f);
+  return o;
+}
+const AVE_TRIS = 2 * (6 + (7 + 5 + 2) * 2) + 5 * 2, AVE_GR = Math.PI / 180;
+const AVE_CORPO = (() => { // tubo de seis lados: [z, y, raio em x, raio em y], do rabo ao bico, mais a crista
+  const an = [[-.28, .01, .05, .04], [-.17, .0, .115, .1], [0, -.015, .15, .155], [.13, .005, .135, .145], [.22, .04, .095, .105], [.3, .075, .105, .105], [.385, .07, .08, .08], [.43, .04, .04, .045], [.475, -.02, .004, .004]], v = [];
+  const pt = (r, k) => { const q = k / 6 * Math.PI * 2; return [Math.cos(q) * r[2], r[1] + Math.sin(q) * r[3], r[0]]; };
+  for (let i = 0; i + 1 < an.length; i++) for (let k = 0; k < 6; k++) { const a = pt(an[i], k), b = pt(an[i], k + 1), c = pt(an[i + 1], k + 1), d = pt(an[i + 1], k); v.push(...a, ...b, ...c, ...a, ...c, ...d); }
+  v.push(0, .17, .36, .035, .15, .24, -.035, .15, .24, 0, .17, .36, -.035, .15, .24, 0, .19, .16, 0, .17, .36, 0, .19, .16, .035, .15, .24); // crista deitada
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3)); g.computeVertexNormals(); return g;
+})();
+function criarAve(esc, mat, pai) {
+  const g = new THREE.Group(); g.rotation.order = 'YXZ';
+  const ger = new THREE.BufferGeometry(), arr = new Float32Array(AVE_TRIS * 9), attr = new THREE.BufferAttribute(arr, 3); attr.setUsage(THREE.DynamicDrawUsage); ger.setAttribute('position', attr);
+  const asas = new THREE.Mesh(ger, mat); asas.frustumCulled = false;
+  const corpo = new THREE.Group(); corpo.add(new THREE.Mesh(AVE_CORPO, mat), asas); g.add(corpo); g.scale.setScalar(esc); pai.add(g);
+  return { g, corpo, ger, arr, attr, pose: new Array(12).fill(0) };
+}
+function poseAve(b, p) {
+  const v = b.arr; let n = 0;
+  const tri = (a, c, d) => { v[n++] = a[0]; v[n++] = a[1]; v[n++] = a[2]; v[n++] = c[0]; v[n++] = c[1]; v[n++] = c[2]; v[n++] = d[0]; v[n++] = d[1]; v[n++] = d[2]; };
+  const soma = (a, d, k) => [a[0] + d[0] * k, a[1] + d[1] * k, a[2] + d[2] * k];
+  // pena em losango comprido, com o ombro perto da ponta: arredondada, como nas fotos, e não uma farpa
+  const pena = (o, d, lado, len, w) => { const m = soma(o, d, len * .68), e = soma(m, lado, w), f = soma(m, lado, -w), t = soma(o, d, len); tri(o, e, t); tri(o, t, f); };
+  const giro = p[6] * AVE_GR, cg = Math.cos(giro), sg = Math.sin(giro);
+  for (const s of [-1, 1]) {
+    const ossoDir = (el, va) => { const e = el * AVE_GR, q = va * AVE_GR, c = Math.cos(q); return [s * c * Math.cos(e), c * Math.sin(e), Math.sin(q)]; };
+    const planoDir = (el, va, tilt) => { // perpendicular ao osso, apontando para trás no plano da asa, inclinada para baixo por tilt (cos, sen)
+      const e = el * AVE_GR, q = va * AVE_GR, x = Math.sin(q) * tilt[0], y = -tilt[1]; return [s * (x * Math.cos(e) - y * Math.sin(e)), x * Math.sin(e) + y * Math.cos(e), -Math.cos(q) * tilt[0]];
+    };
+    const T = [cg, sg], A = [s * .08, .06, .07], dA = ossoDir(p[0], p[3]), dF = ossoDir(p[1], p[4]), dM = ossoDir(p[2], p[5]);
+    const E = soma(A, dA, .26), W = soma(E, dF, .3), H = soma(W, dM, .26), fA = planoDir(p[0], p[3], T), fF = planoDir(p[1], p[4], T), fM = planoDir(p[2], p[5], T);
+    // a membrana de coberteiras, sobre a raiz das penas
+    const At = soma(A, fA, .26), Et = soma(E, fF, .34), Wt = soma(W, fM, .3), Ht = soma(H, fM, .16);
+    tri(A, E, Et); tri(A, Et, At); tri(E, W, Wt); tri(E, Wt, Et); tri(W, H, Ht); tri(W, Ht, Wt);
+    // terciárias e secundárias: a borda de trás serrilhada, cada vez mais compridas para fora
+    for (let i = 0; i < 2; i++) { const k = (i + .5) / 2, o = [A[0] + (E[0] - A[0]) * k, A[1] + (E[1] - A[1]) * k, A[2] + (E[2] - A[2]) * k], d = [fA[0] + (fF[0] - fA[0]) * k, fA[1] + (fF[1] - fA[1]) * k, fA[2] + (fF[2] - fA[2]) * k]; pena(o, d, dA, .36 + k * .1, .1); }
+    for (let i = 0; i < 5; i++) { const k = (i + .5) / 5, o = [E[0] + (W[0] - E[0]) * k, E[1] + (W[1] - E[1]) * k, E[2] + (W[2] - E[2]) * k], d = [fF[0] + (fM[0] - fF[0]) * k, fF[1] + (fM[1] - fF[1]) * k, fF[2] + (fM[2] - fF[2]) * k]; pena(o, d, dF, .46 + k * .05, .085); }
+    // primárias: partem da mão em leque; abertas, as pontas se separam como dedos; recolhidas, correm juntas ao longo da mão
+    for (let i = 0; i < 7; i++) {
+      const k = i / 6, o = soma(W, dM, .26 * k * .95), ang = p[5] - (1 - k) * (14 + 54 * p[7]) - 4 - 6 * (1 - p[7]), el = p[2] - 10 * k * p[7], gi = giro * .35 * (1 - k);
+      const d = ossoDir(el, ang), tr = planoDir(el, ang, [Math.cos(gi), Math.sin(gi)]), len = .44 + .1 * Math.sin(k * Math.PI);
+      pena(o, [d[0] * Math.cos(gi) + tr[0] * Math.sin(gi) * .3, d[1] * Math.cos(gi) + tr[1] * Math.sin(gi) * .3, d[2] * Math.cos(gi) + tr[2] * Math.sin(gi) * .3], tr, len, .05 + .018 * p[7]);
+    }
+  }
+  // rabo: cinco penas em leque, baixa na subida da asa
+  const qr = p[10] * AVE_GR, cr = Math.cos(qr), sr = Math.sin(qr), O = [0, -.005, -.22];
+  for (let i = 0; i < 5; i++) { const q = (i - 2) * (5 + 8 * p[11]) * AVE_GR, sq = Math.sin(q), cq = Math.cos(q); pena(O, [sq, -cq * sr, -cq * cr], [cq, sq * sr, sq * cr], .5 + (i === 2 ? .03 : 0), .055); }
+  b.corpo.position.y = p[8]; b.corpo.rotation.x = -p[9] * AVE_GR;
+  b.attr.needsUpdate = true; b.ger.computeVertexNormals();
+}
+/* AVE-FIM */
+const TIT = { on: false, grp: null, ceu: null, aves: [], pombos: [], proxVoo: 1.2, alvo: new THREE.Vector3(), SOL: new THREE.Vector3(-.62, .5, .6).normalize(), O: new THREE.Vector3(-1500, 0, -1500) };
+// o plano da imagem, com a câmera do título em repouso: as aves cruzam o quadro de um lado ao outro
+const TIT_C = new THREE.Vector3(-21, 1.5, 27), TIT_F = new THREE.Vector3(32, 8.1, -30).normalize(), TIT_D = new THREE.Vector3().crossVectors(TIT_F, new THREE.Vector3(0, 1, 0)).normalize(), TIT_U = new THREE.Vector3().crossVectors(TIT_D, TIT_F), TIT_TG = Math.tan(20 * D2R);
+const AVE_R = (a, b) => a + (b - a) * Math.random(); // fora do gerador com semente: as aves não mudam o mundo sorteado
+function lancarVoo() { // às vezes uma, às vezes duas, às vezes um grupo; retorna falso se não há aves livres para isso
+  const livres = TIT.aves.filter(b => !b.voa), s = Math.random(), n = s < .45 ? 1 : s < .75 ? 2 : 3 + Math.floor(Math.random() * 3);
+  if (livres.length < n) return false;
+  const sent = Math.random() < .5 ? -1 : 1;
+  // sempre ao longe e acima do telhado: pequenas no céu, nunca atravessam o prédio
+  const d = AVE_R(55, 90), hh = d * TIT_TG, yMin = (25 - TIT_C.y - TIT_F.y * d) / TIT_U.y, sy = AVE_R(yMin, Math.max(yMin + .3, hh * .88));
+  const vel = AVE_R(6.5, 9), hz = AVE_R(2.2, 2.8), dd = AVE_R(-.12, .12), sb = AVE_R(-.04, .04);
+  for (let i = 0; i < n; i++) {
+    const b = livres[i], fila = Math.ceil(i / 2), asa = i % 2 ? 1 : -1; // formação irregular: um à frente, os outros atrás e para os lados
+    b.voa = true; b.d = d + 1.6 * fila * asa * AVE_R(.5, 1.1); b.y = sy - fila * AVE_R(.05, .55) + AVE_R(-.3, .3);
+    b.x = -sent * (hh + 7 + fila * AVE_R(1.6, 2.6) + AVE_R(0, .8)); b.sent = sent; b.vel = vel * AVE_R(.97, 1.03); b.dd = dd; b.sb = sb; b.hz = hz * AVE_R(.92, 1.08);
+    b.fase = Math.random(); b.ph = Math.random() * 6.3; b.plana = 0; b.planaT = AVE_R(.6, 2); b.planando = false; b.px = null; b.g.visible = true;
+  }
+  return true;
+}
+function montarTitulo() {
+  const lotes = new Map(), r = mulberry32(1962);
+  const lote = (v, c, g) => { const k = `${v.toFixed(3)}|${c}`; if (!lotes.has(k)) lotes.set(k, { v, c, l: [] }); lotes.get(k).l.push(g); };
+  const box = (x0, y0, z0, x1, y1, z1, v, c = 'CL') => lote(v, c, new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0).translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2));
+  const cyl = (x, z, rad, y0, y1, v, c = 'CL', seg = 8) => lote(v, c, new THREE.CylinderGeometry(rad, rad, y1 - y0, seg).translate(x, (y0 + y1) / 2, z).toNonIndexed());
+  const ico = (x, y, z, rad, v, c = 'VG') => lote(v, c, new THREE.IcosahedronGeometry(rad, 1).translate(x, y, z));
+  const beam = (a, b, t, v, c = 'N') => { const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), len = A.distanceTo(B), g = new THREE.BoxGeometry(t, len, t).translate(0, len / 2, 0); g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.clone().sub(A).normalize())); g.translate(...a); lote(v, c, g); };
+  const L0 = 52, D0 = -12, Y0 = 3.8, AND = 3.15, N = 4, Y1 = Y0 + AND * N; // comprimento, fundo, base da laje, pé-direito e andares
+
+  // chão: gramado, calçada de placas, rua com faixa dupla e meio-fio
+  box(-150, -.3, -150, 150, 0, 150, .55, 'VG');
+  box(-16, 0, 1, L0 + 8, .03, 8, .5);
+  for (let x = -16; x < L0 + 8; x += 2.2) box(x, .03, 1, x + .05, .04, 8, .3);
+  box(-70, 0, 14, 150, .02, 27, .17, 'N');
+  box(-70, 0, 13.6, 150, .13, 14, .62);
+  for (const z of [14.5, 14.85]) box(-70, .02, z, 150, .03, z + .16, .9, 'PE');
+  for (let x = -66; x < 150; x += 7) box(x, .02, 20.3, x + 3.4, .03, 20.5, .85);
+  box(6, 0, 8, 12, .03, 14, .5); // acesso de carros
+
+  // pilotis e térreo recuado, com o saguão aceso
+  for (let x = 1; x <= L0; x += 6) for (const z of [-1.3, D0 + 1.3]) cyl(x, z, .42, 0, Y0, .62);
+  box(0, 0, -7.5, 34, Y0 - .1, D0 + .5, .2, 'N');
+  for (let x = 2; x < 34; x += 2.4) { box(x, 0, -7.46, x + 2.26, Y0 - .3, -7.4, r() < .5 ? 1.05 : .8, 'PE'); box(x + 2.26, 0, -7.46, x + 2.4, Y0 - .1, -7.38, .12, 'N'); }
+  box(-.4, Y0 - .28, D0 - .4, L0 + .4, Y0, .4, .72);                 // laje sob o prédio
+  for (const [x, c, v] of [[36, 'AZ', .35], [39, 'N', .16], [42.5, 'AC', .4], [46, 'CL', .7]]) { box(x, .25, -4.8, x + 2.3, .85, -3.2, v, c); box(x + .4, .85, -4.7, x + 1.9, 1.32, -3.3, .13, 'N'); } // carros sob os pilotis
+
+  // a fachada longa: painel azul-petróleo embaixo, janelas em cima
+  box(0, Y0, D0, L0, Y1, -.12, .26, 'N');
+  const B = 1.62, nB = Math.floor(L0 / B);
+  for (let f = 0; f < N; f++) {
+    const y = Y0 + f * AND;
+    for (let b = 0; b < nB; b++) {
+      const x = .1 + b * B, q = r();
+      box(x + .03, y + .08, -.14, x + B - .03, y + 1.08, -.03, .62 + r() * .05, 'CY');
+      box(x + .05, y + 1.18, -.13, x + B - .05, y + AND - .12, -.05, q < .04 ? 1.2 : q < .1 ? .34 : q < .3 ? 1 : .86, q < .04 ? 'PE' : q < .1 ? 'N' : 'CY'); // reflexo do céu, cortina ou luz acesa
+      box(x, y, -.03, x + .07, y + AND, .05, .92);
+      if (q > .93) { box(x + .2, y + AND - .95, -.02, x + B - .2, y + AND - .15, .42, 1.05, 'CY'); } // basculante aberto
+      if (f < 3 && q > .86 && q < .89) box(x + .4, y + .25, 0, x + 1.2, y + .85, .42, .78); // ar-condicionado
+    }
+    box(0, y - .05, -.03, L0, y + .07, .1, .95);
+    box(0, y + 1.08, -.03, L0, y + 1.18, .07, .9);
+  }
+  box(-.25, Y1, D0 - .25, L0 + .25, Y1 + .55, .25, .85);              // platibanda
+  box(.3, Y1 + .55, D0 + .3, L0 - .3, Y1 + .75, -.3, .4);
+
+  // a empena de tijolo com a faixa estreita de janelas e as cintas de concreto
+  box(-.12, Y0, D0, 0, Y1, -.12, .32, 'AC');
+  for (let y = Y0 + .3; y < Y1; y += .55) for (let z = D0 + (Math.round(y * 2) % 2 ? .2 : .75); z < -.4; z += 1.1) box(-.14, y, z, -.11, y + .17, z + .5, .25, 'AC'); // manchas das fiadas
+  for (let f = 0; f <= N; f++) box(-.3, Y0 + f * AND - .1, D0 - .1, 0, Y0 + f * AND + .12, .1, .85);
+  box(-.3, Y0, -.25, 0, Y1, 0, .85); box(-.3, Y0, D0, 0, Y1, D0 + .25, .85);
+  for (let f = 0; f < N; f++) { const y = Y0 + f * AND; box(-.2, y + .45, -5.3, -.08, y + AND - .35, -3.7, .22, 'N'); box(-.24, y + .55, -5.2, -.12, y + AND - .45, -3.8, 1, 'CY'); box(-.25, y + .45, -4.53, -.1, y + AND - .35, -4.47, .9); }
+
+  // o muro claro com o nome e o relevo de concreto, com a porta vermelha
+  box(-15, 0, -.4, -.3, 4.3, .5, .92);
+  for (let x = -14.5; x < -.3; x += 1.2) box(x, .05, .5, x + .04, 4.25, .52, .55);
+  box(-15.2, 4.3, -.5, -.1, 4.45, .6, .7);
+  box(1, 0, -7.2, 8, Y0 - .28, -6.8, .62);
+  for (let k = 0; k < 150; k++) { const x = 1.1 + r() * 6.4, y = .15 + r() * 3, w = .2 + r() * .55, h = .1 + r() * .35; box(x, y, -6.82, Math.min(7.95, x + w), Math.min(Y0 - .35, y + h), -6.68 - r() * .08, r() < .5 ? .85 : .42); }
+  box(-.2, 0, -7.1, .9, 2.5, -6.75, .5, 'AC');
+
+  // poste em primeiro plano, placa, arbustos, árvores, torre de transmissão e mastros no telhado
+  beam([5, 0, 11.5], [5, 9.4, 11.5], .17, .62, 'CL'); beam([5, 9.4, 11.5], [5, 9.8, 10.1], .11, .62, 'CL'); box(4.75, 9.72, 9.6, 5.25, 9.86, 10.4, .9);
+  beam([-5, 0, 11], [-5, 2.1, 11], .07, .6, 'CL'); box(-5.4, 2.1, 10.97, -4.6, 2.7, 11.03, .85, 'AZ');
+  for (const [x, z, q] of [[-13, 3.2, 1.4], [-10.8, 3.6, 1], [-15.4, 3, 1.15], [-8.8, 3, .8], [13, 2.4, .7], [17, 2.5, .75]]) { ico(x, q * .7, z, q, .22 + q * .06); ico(x + q * .5, q * .55, z + .3, q * .7, .3); }
+  for (const [x, z, q] of [[-27, -7, 5.4], [61, -2, 5.6], [68, -16, 7], [-40, -24, 8], [-20, -30, 7], [20, -34, 9], [46, -30, 8]]) { cyl(x, z, q * .08, 0, q, .16, 'AC', 6); for (const [a, y, b, k] of [[0, 1.1, 0, .78], [.45, .8, .25, .55], [-.45, .85, -.2, .6], [.1, 1.5, -.2, .5]]) ico(x + a * q, y * q, z + b * q, k * q, .24 + k * .14); }
+  for (let k = 0; k < 7; k++) { const x = 4 + k * 7; beam([x, Y1 + .7, -6], [x, Y1 + 4.2, -6], .07, .5, 'CL'); if (k < 2) box(x, Y1 + 3.4, -6.02, x + 1.3, Y1 + 4.15, -5.98, k ? .9 : .7, k ? 'PE' : 'AZ'); }
+  const torre = (x, z, h, w) => { for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) beam([x + a * w, 0, z + b * w], [x + a * .12 * w, h, z + b * .12 * w], .2, .16); for (let k = 1; k < 6; k++) { const y = h * k / 6, q = w * (1 - k / 6 * .88); beam([x - q, y, z - q], [x + q, y, z - q], .12, .16); beam([x - q, y, z + q], [x + q, y, z + q], .12, .16); } for (const y of [.74, .86]) beam([x - w * 1.3, h * y, z], [x + w * 1.3, h * y, z], .13, .16); };
+  torre(82, -26, 30, 3.2);
+
+  const grp = new THREE.Group(); grp.position.copy(TIT.O);
+  for (const { v, c, l } of lotes.values()) { const m = new THREE.Mesh(mergeGeometries(l.map(g => g.index ? g.toNonIndexed() : g)), new THREE.MeshLambertMaterial({ color: ctone(v, c), flatShading: true })); m.castShadow = v > .05 && l[0].attributes.position.count < 1e6; m.receiveShadow = true; grp.add(m); l.forEach(g => g.dispose()); }
+
+  // o letreiro no muro
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 40; const x = cv.getContext('2d'); x.fillStyle = '#e8e4da'; x.fillRect(0, 0, 256, 40); x.fillStyle = '#2a2c44'; x.font = 'bold 30px Georgia, serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('Zenith Corp.', 128, 21);
+  const placa = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv) })); placa.position.set(-3.8, 2.5, .55); grp.add(placa);
+
+  // céu: gradiente e nuvens numa esfera que acompanha a câmera
+  const cc = document.createElement('canvas'); cc.width = 512; cc.height = 256; const q = cc.getContext('2d'), gr = q.createLinearGradient(0, 0, 0, 256);
+  gr.addColorStop(0, '#234a7c'); gr.addColorStop(.32, '#3f76a8'); gr.addColorStop(.5, '#d9dfd6'); gr.addColorStop(1, '#d9dfd6'); q.fillStyle = gr; q.fillRect(0, 0, 512, 256);
+  for (let k = 0; k < 34; k++) { const cx = r() * 512, cy = 55 + r() * 62, w = 26 + r() * 60; for (let m = 0; m < 9; m++) { const a = cx + (r() - .5) * w * 1.7, b = cy + (r() - .5) * w * .28, rad = w * (.16 + r() * .24); const g2 = q.createRadialGradient(a, b, 0, a, b, rad); g2.addColorStop(0, 'rgba(255,255,255,.95)'); g2.addColorStop(.6, 'rgba(250,250,245,.6)'); g2.addColorStop(1, 'rgba(240,240,240,0)'); q.fillStyle = g2; q.fillRect(a - rad, b - rad, rad * 2, rad * 2); } }
+  const texCeu = new THREE.CanvasTexture(cc); texCeu.wrapS = THREE.RepeatWrapping;
+  const ceu = new THREE.Mesh(new THREE.SphereGeometry(120, 24, 12), new THREE.MeshBasicMaterial({ map: texCeu, side: THREE.BackSide, fog: false, depthWrite: false })); ceu.renderOrder = -1;
+
+  // pássaros: claros por cima e escuros por baixo, como nas fotos — vistos da calçada são silhueta, com um lampejo quando a asa desce
+  const mat = new THREE.MeshLambertMaterial({ color: ctone(.5, 'CL'), side: THREE.DoubleSide, fog: false });
+  TIT.aves = Array.from({ length: 6 }, () => { const b = criarAve(1.15 + r() * .3, mat, grp); b.g.visible = false; b.voa = false; return b; });
+  TIT.pombos = [9.4, 11.5, 26, 35.6].map(px => { const b = criarAve(.72, mat, grp); poseAve(b, AVE_POUSO); b.g.position.set(px, Y1 + .75 + .1, -.5); b.g.rotation.y = r() * 6.3; b.ph = r() * 6.3; return b; });
+
+  scene.add(grp, ceu); TIT.grp = grp; TIT.ceu = ceu;
+}
+function setTitulo(on) { // liga e desliga o cenário: céu, névoa, sombra e lente são outros dentro do prédio
+  TIT.on = on;
+  if (on && !TIT.grp) montarTitulo();
+  if (TIT.grp) TIT.grp.visible = TIT.ceu.visible = on;
+  camera.fov = on ? 40 : 32; camera.updateProjectionMatrix(); sun.intensity = on ? 1.9 : 1.5;
+  const q = on ? 75 : 22; Object.assign(sun.shadow.camera, { left: -q, right: q, top: q, bottom: -q, far: on ? 230 : 90 }); sun.shadow.camera.updateProjectionMatrix();
+  const nv = on ? new THREE.Color('#d9dfd6') : new THREE.Color(L.nevoa ? L.nevoa.cor : 0); scene.fog.color.copy(nv); scene.background.copy(nv);
+}
+function updateTitulo(dt, t) {
+  if ((game === 'title') !== TIT.on) setTitulo(game === 'title');
+  if (!TIT.on) return;
+  // de tempos em tempos, uma nova passagem; se o grupo sorteado não couber nas aves livres, tenta de novo logo em seguida
+  TIT.proxVoo -= dt;
+  if (TIT.proxVoo <= 0) TIT.proxVoo = lancarVoo() ? AVE_R(4, 10) : .6;
+  const _p = TIT.poseV || (TIT.poseV = new Array(12));
+  for (const b of TIT.aves) {
+    if (!b.voa) continue;
+    b.x += b.sent * b.vel * dt;
+    const tau = t + b.ph, sx = b.x, dNow = b.d + b.dd * b.sent * b.x, yNow = b.y + b.sb * b.sent * b.x + Math.sin(tau * .8) * .35;
+    if (b.sent * sx > dNow * TIT_TG + 7) { b.voa = false; b.g.visible = false; continue; } // saiu do outro lado do quadro
+    const x = TIT_C.x + TIT_F.x * dNow + TIT_D.x * sx + TIT_U.x * yNow, y = TIT_C.y + TIT_F.y * dNow + TIT_D.y * sx + TIT_U.y * yNow, z = TIT_C.z + TIT_F.z * dNow + TIT_D.z * sx + TIT_U.z * yNow;
+    b.g.position.set(x, y, z);
+    if (b.px !== null) { const dx = x - b.px, dy = y - b.py, dz = z - b.pz, h = Math.hypot(dx, dz); if (h > 1e-4) { b.g.rotation.y = Math.atan2(dx, dz); b.g.rotation.x = -clamp(Math.atan2(dy, h), -.35, .35); } } else b.g.rotation.y = Math.atan2(TIT_D.x * b.sent, TIT_D.z * b.sent);
+    b.px = x; b.py = y; b.pz = z;
+    b.planaT -= dt; if (b.planaT <= 0) { b.planando = !b.planando; b.planaT = b.planando ? AVE_R(.7, 1.8) : AVE_R(1, 2.6); } // batidas e curtos trechos planando
+    b.plana += ((b.planando ? 1 : 0) - b.plana) * Math.min(1, dt * 6);
+    b.fase += dt * b.hz * (1 - b.plana * .75); avePose(b.fase, _p);
+    for (let k = 0; k < 12; k++) _p[k] += (AVE_PLANA[k] - _p[k]) * b.plana;
+    poseAve(b, _p);
+  }
+  for (const b of TIT.pombos) { b.g.rotation.x = Math.sin(t * 1.4 + b.ph) > .92 ? .4 : -.2; if (Math.sin(t * .3 + b.ph) > .96) b.g.rotation.y += dt * 2; } // ciscam e olham em volta
+}
+function cameraTitulo(t) { // da calçada, baixa, olhando para cima: o prédio foge em diagonal, como na foto, e a câmera desliza devagar
+  const u = Math.sin(t * .045), v = Math.sin(t * .071 + 1);
+  camera.position.set(TIT.O.x - 21 + u * 4.5, 1.5 + v * .3, TIT.O.z + 27 + u * 1.5);
+  TIT.alvo.set(TIT.O.x + 11 + u * 2.2, 9.6 + v * .35, TIT.O.z - 3);
+  camera.lookAt(TIT.alvo); camera.rotateZ(.018 * Math.sin(t * .05));
+  TIT.ceu.position.copy(camera.position); TIT.ceu.rotation.y = t * .0035; // as nuvens andam
+}
+
+/* =====================================================================
    8. ENTRADA + LAÇO PRINCIPAL
    ===================================================================== */
 // cada jogo novo sorteia outra semente (o cenário inteiro deriva dela em startLevel); ?seed=N na URL fixa um mundo
 const FIXED_SEED = +qs.get('seed') || 0;
-function newRun() {
+function resetRun() {
   T.seed = FIXED_SEED || 1 + Math.floor(Math.random() * 0x3fffffff);
-  Object.assign(player, { san: 100, bat: 100, stam: 100, agua: 1, cafe: 0, sip: 0, sipT: 0, lanterna: true, hurt: 0, dead: false, seat: null, ignored: false, sink: 0, batK: 1, holding: false, holdT: 0, holdCD: 0, puff: 0, breathT: 0, copo: false });
+  Object.assign(player, { san: 100, bat: 100, stam: 100, agua: 1, cafe: 0, sip: 0, sipT: 0, lanterna: false, temLanterna: false, hurt: 0, dead: false, seat: null, ignored: false, sink: 0, batK: 1, holding: false, holdT: 0, holdCD: 0, puff: 0, breathT: 0, copo: false });
   Object.assign(stats, { salas: 0, niveis: 0, notas: new Set(), tempo: 0, afastados: 0 });
-  collected.clear(); player.anim.play('Idle_Neutral', { restart: true });
-  startLevel(0); game = 'play';
+  collected.clear(); player.anim.play('Idle_Neutral', { restart: true }); prig.lamp.visible = false; prig.j.arm_R.o.rotation.y = prig.j.arm_L.o.rotation.y = 0;
 }
+function newRun() { resetRun(); startLevel(0); game = 'play'; }
 /* Troca de paleta em jogo (tecla C; Shift+C escolhe o arquivo): relê palette_dither.png, pega as cores que aparecem nela
    (ignora as raras, até MAXPAL), ordena do escuro para o claro e refaz cena, vinheta e UI. Por file:// o navegador
    não deixa ler os pixels: aí abre um seletor de arquivo. */
@@ -3405,6 +4161,7 @@ function applyPalette(hexes, quiet = false) {
   const cols = hexes.map(h => new THREE.Color(h)).sort((a, b) => lumOf(a) - lumOf(b));
   NPAL = cols.length; cols.forEach((c, i) => PAL[i].copy(c)); ditherMat.uniforms.uN.value = NPAL;
   fixLitMat.color.copy(lampCol()); // a luminária acompanha a cor mais clara da paleta nova
+  doorTopMat.color.copy(doorTopCol());
   T.paleta = cols.map(c => '#' + c.getHexString());   // só a cena: a UI Zenith mantém as cores do kit
   if (!quiet) showMsg(`paleta: ${NPAL} cores de ${PAL_FILE}`);
 }
@@ -3434,7 +4191,7 @@ const MUSIC_FADE = 1.6;
 let musicCur = 0;
 const musicUpdate = dt => {
   const playing = game === 'play' || game === 'note' || game === 'map' || game === 'help' || game === 'levels';
-  const target = !musicMuted && playing ? (kindAt(player.x, player.z) === 'out' ? .01 : musicVol) : 0;
+  const target = !musicMuted && playing && !L.prologo ? (kindAt(player.x, player.z) === 'out' ? .01 : musicVol) : 0;
   musicCur = dt === undefined ? target : musicCur + (target - musicCur) * (1 - Math.exp(-dt / MUSIC_FADE));
   if (Math.abs(target - musicCur) < .0005) musicCur = target;
   bgm.volume = clamp(musicCur, 0, 1);
@@ -3457,13 +4214,14 @@ addEventListener('keydown', e => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   keys.add(e.code);
   if (game === 'levels') { levelKey(e.code); return; }
-  if (e.code === 'KeyL' && !e.repeat && (game === 'title' || game === 'play')) { levelsFrom = game; levelSel = levelN; game = 'levels'; return; }
+  if (game === 'play' && L.prologo && prologoKey(e)) return;
+  if (e.code === 'KeyL' && !e.repeat && (game === 'title' || game === 'play')) { levelsFrom = game; levelSel = Math.max(0, levelN); game = 'levels'; return; }
   if (e.code === 'Minus' || e.code === 'NumpadSubtract') { musicSet(musicVol - .1); showMsg(`volume ${Math.round(musicVol * 100)}%`, 1.2); }
   if (e.code === 'Equal' || e.code === 'NumpadAdd') { musicSet(musicVol + .1); showMsg(`volume ${Math.round(musicVol * 100)}%`, 1.2); }
   if (e.code === 'Digit0' && !e.repeat) { musicMuted = !musicMuted; musicApply(); showMsg(musicMuted ? 'volume mudo' : `volume ${Math.round(musicVol * 100)}%`, 1.2); }
   if (e.code === 'KeyT') { const u = ditherMat.uniforms.uMode; u.value = 1 - u.value; } // alterna: pares livres × pares próximos
   if (e.code === 'KeyC' && !e.repeat) { e.shiftKey ? palInput.click() : loadPalette(); }   // relê palette_dither.png
-  if (game === 'title' && (e.code === 'Enter' || e.code === 'Space')) { newRun(); blip(90, 50, .8, .15, 'sawtooth'); return; }
+  if (game === 'title' && (e.code === 'Enter' || e.code === 'Space')) { startPrologo(); blip(90, 50, .8, .15, 'sawtooth'); return; } // ESC pula; morrer e reiniciar vai direto ao Nível 0
   if (game === 'end' && endT > 2.5 && (e.code === 'Enter' || e.code === 'Space')) { newRun(); return; }
   if (game === 'note' && ['KeyE', 'Enter', 'Escape', 'Space'].includes(e.code)) { keys.delete('KeyE'); game = 'play'; noteOpen = -1; return; }
   if (game === 'map' && (e.code === 'KeyM' || e.code === 'Escape')) { game = 'play'; return; }
@@ -3471,7 +4229,7 @@ addEventListener('keydown', e => {
   if (game !== 'play') return;
   if (e.code === 'KeyM') game = 'map';
   if (e.code === 'KeyH') game = 'help';
-  if (e.code === 'KeyF') { player.lanterna = !player.lanterna; blip(1400, 1200, .04, .08); }
+  if (e.code === 'KeyF') { if (!player.temLanterna) { showMsg('sem lanterna'); return; } player.lanterna = !player.lanterna; blip(1400, 1200, .04, .08); }
   if (e.code === 'KeyR') drink();
   if (e.code === 'KeyG') throwCup();
 });
@@ -3514,7 +4272,7 @@ const stickEnd = () => { stickId = null; stick.on = false; stick.x = stick.z = 0
 touchUI.addEventListener('touchstart', e => {
   e.preventDefault();
   for (const t of e.changedTouches) {
-    if (game !== 'play') { // telas sem andar: um toque age como Enter (ou fecha o mapa)
+    if (game !== 'play' || (L.prologo && PRO.trava)) { // telas sem andar: um toque age como Enter (ou fecha o mapa)
       if (game === 'map' || game === 'help') { sendKey('Escape', true); sendKey('Escape', false); }
       else { sendKey('Enter', true); sendKey('Enter', false); }
       continue;
@@ -3564,64 +4322,80 @@ function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(.05, clock.getDelta()), t = clock.elapsedTime;
   if (game === 'play') { stats.tempo += dt; levelT += dt; updatePlayer(dt, t); updateEntities(dt, t); updateNoises(dt); updateCat(dt, t); updateCrows(dt, t); }
+  updateTitulo(dt, t);
+  if (L.prologo) updatePrologo(dt, t);
   updateRooms(dt, t); updateRoomFlicker(dt, t); updateWoman(dt, t); updateCorner(dt, t); updateBrotos(dt, t); updateBalloons(dt, t); updateRoses(dt);
   if (game === 'trans') {
     fadeT += dt; glitch = Math.max(glitch, 1 - Math.abs(fadeT - 1));
-    if (fadeT >= 1 && !player.transDone) { player.transDone = true; stats.niveis++; player.san = Math.min(100, player.san + 15); startLevel(levelN + 1); }
+    if (fadeT >= 1 && !player.transDone) { player.transDone = true; if (L.prologo) resetRun(); else { stats.niveis++; player.san = Math.min(100, player.san + 15); } startLevel(levelN + 1); }
     if (fadeT >= 2) { game = 'play'; player.transDone = false; }
   }
-  if (game === 'title') { titleT += dt; player.x = .5 * L.C + Math.sin(titleT * .05) * 6; player.z = .5 * L.C - titleT * .25; prig.root.position.set(-999, 0, 0); lightCache = lightLevel(player.x, player.z); }
+  if (game === 'title') { titleT += dt; player.x = 8 + Math.sin(titleT * .05) * 5; player.z = 7 + Math.cos(titleT * .04) * 3; prig.root.position.set(-999, 0, 0); lightCache = lightLevel(player.x, player.z); }
   if (game !== 'end' || endT < 3) updateChunks(player.x, player.z);
   updateFlicker(t, player.x, player.z);
   updateItems(t);
   player.anim.update(dt);
+  prig.maos.L.mo.quaternion.identity(); prig.maos.R.mo.quaternion.identity();
+  if (L.prologo && PRO.etapa === 'sentado' && player.seat) teclar(prig, t, player.face);
   if (game === 'play' && player.lanterna && player.bat > 0 && player.anim.cur !== 'Hit_Front_Light') prig.j.arm_R.o.rotation.x = -62 * D2R, prig.j.fore_R.o.rotation.x = -10 * D2R;
   // copo na mão esquerda; a cada gole o braço sobe até a boca
   prig.cup.visible = (player.cafe > 0 || player.copo) && !player.dead;
   if (game === 'play' && prig.cup.visible && player.anim.cur !== 'Hit_Front_Light') { const k = Math.sin(clamp(player.sip / .5, 0, 1) * Math.PI); prig.j.arm_L.o.rotation.x = -(30 + k * 70) * D2R; prig.j.fore_L.o.rotation.x = -(55 + k * 45) * D2R; }
+  updateContato();
   musicUpdate(dt);
   audioUpdate(dt);
   cameraAndRender(dt, t);
 }
+const _sunOfs = new THREE.Vector3(18, 0, 0);
+const PRO_CAM = { D: 3.7, pitch: 52, luz: 5.2, lx: -.9, ly: 2.4, lz: .8, yaw: -48 * D2R, dx: -.25, dy: -.2, dz: -.15, exp: .1, vig: .35 }, _camLook = new THREE.Vector3(); // enquadramento da primeira cena
 function cameraAndRender(dt, t) {
   const title = game === 'title';
   camTarget.lerp(new THREE.Vector3(player.x, 1, player.z), title ? 1 : 1 - Math.exp(-dt * 7));
   viewK += ((player.view > 0 ? 1 : 0) - viewK) * Math.min(1, dt * 2); // do alto da torre, a câmera se afasta
-  const pitch = 58 * D2R, D = title ? 34 : zoom + viewK * 16, sanK = 1 - player.san / 100;
+  const closeK = L.prologo && !title ? sstep(0, 1, PRO.closeK) : 0; // prólogo: a primeira cena, fechada na mesa; ao levantar, abre para a câmera do jogo
+  const pitch = (58 + (PRO_CAM.pitch - 58) * closeK) * D2R, D = (title ? 34 : zoom + viewK * 16) * (1 - closeK) + PRO_CAM.D * closeK, sanK = 1 - player.san / 100;
+  const yaw = PRO_CAM.yaw * closeK, sideX = Math.sin(yaw) * Math.cos(pitch) * D, backZ = Math.cos(yaw) * Math.cos(pitch) * D;
   shake = Math.max(0, shake - dt * 1.5);
   const wob = game === 'play' && player.san < 35 ? (35 - player.san) / 35 * .25 : 0;
-  camera.position.set(camTarget.x + R(-1, 1) * shake + Math.sin(t * .7) * wob, camTarget.y + Math.sin(pitch) * D, camTarget.z + Math.cos(pitch) * D + R(-1, 1) * shake + Math.cos(t * .53) * wob);
-  camera.lookAt(camTarget);
+  _camLook.copy(camTarget); _camLook.x += PRO_CAM.dx * closeK; _camLook.y += PRO_CAM.dy * closeK; _camLook.z += PRO_CAM.dz * closeK;
+  camera.position.set(_camLook.x + sideX + R(-1, 1) * shake + Math.sin(t * .7) * wob, _camLook.y + Math.sin(pitch) * D, _camLook.z + backZ + R(-1, 1) * shake + Math.cos(t * .53) * wob);
+  camera.lookAt(_camLook);
+  if (title && TIT.on) cameraTitulo(t);
   camera.updateMatrixWorld();
-  focusPt.set(player.x, .9, player.z);
+  focusPt.set(player.x, .9, player.z); if (title && TIT.on) focusPt.copy(TIT.alvo);
   const fv = focusPt.clone().applyMatrix4(camera.matrixWorldInverse), fp = focusPt.clone().project(camera), fk = 1 - Math.exp(-dt * (title ? 4 : 13));
   const lu = lensMat.uniforms;
-  lu.uFocus.value.lerp(new THREE.Vector2(fp.x * .5 + .5, fp.y * .5 + .5), fk);
-  lu.uFocusDepth.value += (-fv.z - lu.uFocusDepth.value) * fk;
-  lu.uAmount.value += ((title ? 1.25 : 1 + sanK * .25) - lu.uAmount.value) * fk;
+  const ftk = title ? 1 : fk;
+  lu.uFocus.value.lerp(new THREE.Vector2(fp.x * .5 + .5, fp.y * .5 + .5), ftk);
+  lu.uFocusDepth.value += (-fv.z - lu.uFocusDepth.value) * ftk;
+  lu.uAmount.value += ((title ? .3 : (1 + sanK * .25) * (1 - closeK * .75)) - lu.uAmount.value) * ftk;
   lu.uNear.value = camera.near; lu.uFar.value = camera.far;
   const kz = clamp(Math.sqrt(24 / D), .7, 1.4); lu.uR0.value = LENS.raio * kz; lu.uR1.value = LENS.queda * kz; lu.uDepthK.value = LENS.profundidade * kz;
-  scene.fog.near = D + (L.nevoa ? L.nevoa.near : 4); scene.fog.far = D + (L.nevoa ? L.nevoa.far : 22);
+  scene.fog.near = title ? 70 : D + (L.nevoa ? L.nevoa.near : 4); scene.fog.far = title ? 150 : D + (L.nevoa ? L.nevoa.far : 22);
 
-  CUT.uPlayer.value.set(title ? -9999 : player.x, 0, player.z);
-  selfLight.position.set(player.x, 2.1, player.z); selfLight.intensity = title ? 0 : 7.5;
+  CUT.uPlayer.value.set(title || closeK > .25 ? -9999 : player.x, 0, player.z); // na primeira cena, nada é recortado: o encosto da cadeira faz parte da imagem
+  selfLight.position.set(player.x + PRO_CAM.lx * closeK, 2.1 + (PRO_CAM.ly - 2.1) * closeK, player.z + PRO_CAM.lz * closeK); // na primeira cena, a luz vem do lado do terminal e acha o rosto selfLight.intensity = title ? 0 : 7.5 + (PRO_CAM.luz - 7.5) * closeK;
   spot.position.set(player.x + aimX * .3, 1.25, player.z + aimZ * .3); spot.target.position.set(player.x + aimX * 6, .2, player.z + aimZ * 6);
   if (title || player.dead) spot.intensity = 0;
   exitLight.intensity = 22 + Math.sin(t * 3) * 6;
-  sun.position.copy(camTarget).addScaledVector(SUN_DIR, 45); sun.target.position.copy(camTarget);
+  if (title && TIT.on) { sun.target.position.copy(TIT.O).add(_sunOfs); sun.position.copy(sun.target.position).addScaledVector(TIT.SOL, 110); }
+  else { sun.position.copy(camTarget).addScaledVector(SUN_DIR, 45); sun.target.position.copy(camTarget); }
 
   flash *= Math.exp(-dt * 5); glitch = Math.max(0, glitch - dt * 1.4);
   if (game === 'play' && player.san < 30 && h3(Math.floor(t * 3), 2, 31) < .08) glitch = Math.max(glitch, .5);
   ditherMat.uniforms.uGrain.value = T.pos.grao + (game === 'play' ? sanK * sanK * .12 : 0);
   crtMat.uniforms.uFlicker.value = T.pos.flicker + (game === 'play' ? sanK * .08 : 0);
+  crtMat.uniforms.uVig.value = L.prologo && !PRO.fechado ? .35 + closeK * PRO_CAM.vig : T.pos.vinheta;
+  ditherMat.uniforms.uBright.value = T.pos.exposicao - closeK * PRO_CAM.exp;
   crtMat.uniforms.uGlitch.value = Math.min(1.5, glitch);
-  crtMat.uniforms.uFade.value = game === 'trans' ? 1 - Math.abs(fadeT - 1) : game === 'end' ? clamp((endT - .5) * .5, 0, .55) : 0;
+  crtMat.uniforms.uFade.value = game === 'trans' ? 1 - Math.abs(fadeT - 1) : game === 'end' ? clamp((endT - .5) * .5, 0, .55) : L.prologo && !title ? clamp(1 - PRO.t0 / 1.4, 0, 1) : 0; // a primeira cena abre do preto
 
   g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, UI.width, UI.height); g.setTransform(UIS, 0, 0, UIS, 0, 0);
   if (title) drawTitle(t);
   else if (game === 'map') drawMap();
   else if (game === 'help') drawHelp();
   else if (game === 'levels') drawLevels();
+  else if (L.prologo) drawPrologo(dt, t);
   else { drawHUD(dt, t); if (game === 'note') drawNote(); if (game === 'end') drawEnd(dt, t); }
   uiTex.needsUpdate = true;
 
@@ -3632,8 +4406,8 @@ function cameraAndRender(dt, t) {
   renderer.setRenderTarget(null); renderer.render(postB, ortho);
 }
 
-window.DBG = { player, entities, stats, chunks, get L() { return L; }, get cat() { return cat; }, get woman() { return woman; }, get corner() { return corner; }, get curRoom() { return curRoom; }, burning, altered, pendingRoom, roomLookup, roomOnScreen, ignite, rebuildChunk, layout, startRoomFlicker, placeCorner, h3, bgm, get CUT() { return CUT; }, EXIT, startLevel, spawnEntity, lightLevel, chunkKind, layout, setGame: s => game = s, note: n => { noteOpen = n; stats.notas.add(n); game = 'note'; }, msg: showMsg,go: (x, z) => { player.x = x; player.z = z; }, updateTripod, makeNoise, breathHeard, startPhone, roomAt, cellNbrs, get phone() { return phone; }, get waves() { return waves.length; }, get thrown() { return thrown; } };
-startLevel(0); banner = null; game = 'title';
+window.DBG = { TIT, get lanternaItem() { return lanternaItem; }, prig, THREE, PRO, PRO_CAM, player, entities, stats, chunks, get L() { return L; }, get cat() { return cat; }, get woman() { return woman; }, get corner() { return corner; }, get curRoom() { return curRoom; }, burning, altered, pendingRoom, roomLookup, roomOnScreen, ignite, rebuildChunk, layout, startRoomFlicker, placeCorner, h3, bgm, get CUT() { return CUT; }, EXIT, startLevel, spawnEntity, lightLevel, chunkKind, layout, setGame: s => game = s, note: n => { noteOpen = n; stats.notas.add(n); game = 'note'; }, msg: showMsg,go: (x, z) => { player.x = x; player.z = z; }, updateTripod, makeNoise, breathHeard, startPhone, roomAt, cellNbrs, get phone() { return phone; }, get waves() { return waves.length; }, get thrown() { return thrown; } };
+startLevel(-1); banner = null; game = 'title'; // ao fundo do título, o escritório do último dia
 // pede as fontes da Ref já na abertura (o canvas não dispara o download sozinho)
 Promise.all(['20px "Krona One"', '20px "Share Tech Mono"'].map(f => document.fonts.load(f, 'AZaz09 ÁÀÂÃÉÊÍÓÔÕÚÇáàâãéêíóôõúç—“”'))).catch(() => { }); // com os acentos: nenhum glifo cai na fonte reserva
 frame();
